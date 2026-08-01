@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
 import 'pdf_preview_screen.dart';
 
 import '../models/customer.dart';
@@ -170,10 +171,15 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (r == null) return;
     final app = context.read<AppProvider>();
     final bytes = await PdfService.instance.generateReceiptPdf(r, app.settings);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/سند_قبض_${r.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    _snack('تم حفظ PDF: ${file.path}');
+    final outputPath = await FilePicker.platform.saveFile(
+      dialogTitle: 'اختر مكان حفظ السند',
+      fileName: 'سند_قبض_${r.docNumber}.pdf',
+      bytes: bytes,
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
+    if (outputPath == null) return;
+    _snack('تم حفظ PDF بنجاح');
   }
 
   Future<void> _previewReceipt() async {
