@@ -392,4 +392,129 @@ class PdfService {
     );
     return doc.save();
   }
+
+  String _docTypeLabel(LedgerDocType t) {
+    switch (t) {
+      case LedgerDocType.invoiceSale:
+        return 'فاتورة بيع';
+      case LedgerDocType.invoiceReturn:
+        return 'فاتورة مرتجع';
+      case LedgerDocType.receipt:
+        return 'سند قبض';
+      case LedgerDocType.opening:
+        return 'رصيد افتتاحي';
+    }
+  }
+
+  /// سطر مختصر لحركة واحدة بكشف الحساب، بشكل مناسب لعرض 80مم (سطرين بدل
+  /// جدول عريض لا يتّسع على الرول الحراري): التاريخ ونوع/رقم المستند
+  /// بالأعلى، والمبلغ (+ مدين / - دائن) والرصيد المتحرك بالأسفل.
+  pw.Widget _statementLine80mm(
+      LedgerEntry e, CompanySettings settings, DateFormat df) {
+    final isDebit = e.debit > 0;
+    final amount = isDebit ? e.debit : e.credit;
+    final numberSuffix = e.docNumber == '-' ? '' : ' #${e.docNumber}';
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text(df.format(e.date),
+                  style: pw.TextStyle(font: _arabicFont, fontSize: 7),
+                  textDirection: pw.TextDirection.rtl),
+              pw.Text('${_docTypeLabel(e.docType)}$numberSuffix',
+                  style: pw.TextStyle(
+                      font: _arabicFontBold, fontSize: settings.tableFontSize),
+                  textDirection: pw.TextDirection.rtl),
+            ],
+          ),
+          pw.SizedBox(height: 1),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('الرصيد: ${_currency.format(e.runningBalance)}',
+                  style: pw.TextStyle(font: _arabicFont, fontSize: 7),
+                  textDirection: pw.TextDirection.rtl),
+              pw.Text(
+                (isDebit ? '+' : (amount > 0 ? '-' : '')) +
+                    _currency.format(amount),
+                style: pw.TextStyle(
+                    font: _arabicFontBold,
+                    fontSize: settings.tableFontSize,
+                    color: isDebit ? PdfColors.red700 : PdfColors.green700),
+                textDirection: pw.TextDirection.rtl,
+              ),
+            ],
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 3),
+            child: pw.Divider(thickness: 0.3, color: PdfColors.grey400),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// نسخة كشف الحساب المخصّصة للطباعة الحرارية بعرض 80مم — بديل لنسخة A4
+  /// حين يريد المندوب طباعة كشف الحساب فورًا من نفس طابعة الفواتير
+  /// الميدانية بدل تصديره كـ PDF لطابعة عادية.
+  Future<Uint8List> generateStatementPdf80mm(
+    String customerName,
+    List<LedgerEntry> entries,
+    CompanySettings settings,
+  ) async {
+    await _ensureFonts();
+    final df = DateFormat('yyyy/MM/dd HH:mm');
+    final doc = pw.Document();
+
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        margin: const pw.EdgeInsets.all(8),
+        build: (context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _header(settings, docTitle: 'كشف حساب'),
+              pw.SizedBox(height: 2),
+              pw.Text(
+                customerName,
+                style: pw.TextStyle(font: _arabicFontBold, fontSize: 10),
+                textDirection: pw.TextDirection.rtl,
+                textAlign: pw.TextAlign.center,
+              ),
+              pw.SizedBox(height: 6),
+              pw.Divider(thickness: 0.5),
+              if (entries.isEmpty)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(vertical: 10),
+                  child: pw.Text('لا توجد حركات لهذا العميل',
+                      style: pw.TextStyle(font: _arabicFont, fontSize: 9),
+                      textDirection: pw.TextDirection.rtl,
+                      textAlign: pw.TextAlign.center),
+                )
+              else
+                for (final e in entries) _statementLine80mm(e, settings, df),
+              pw.SizedBox(height: 4),
+              pw.Divider(thickness: 0.7),
+              if (entries.isNotEmpty)
+                _kv('الرصيد الحالي',
+                    _currency.format(entries.last.runningBalance),
+                    fontSize: 11),
+              pw.SizedBox(height: 6),
+              pw.Center(
+                child: pw.Text('شكرًا لتعاملكم معنا',
+                    style: pw.TextStyle(font: _arabicFont, fontSize: 8),
+                    textDirection: pw.TextDirection.rtl),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return doc.save();
+  }
 }

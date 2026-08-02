@@ -59,6 +59,12 @@ dependencies:
   # اختيار ملف النسخة الاحتياطية عند الاستيراد
   file_picker: ^8.1.2
 
+  # تمرير سريع (Swipe actions) على بطاقات القوائم
+  flutter_slidable: ^3.1.1
+
+  # فتح تطبيق الاتصال وواتساب مباشرة من بطاقة العميل
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

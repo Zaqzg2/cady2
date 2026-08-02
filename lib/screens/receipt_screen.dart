@@ -20,7 +20,8 @@ import '../widgets/signature_pad_widget.dart';
 /// للتعديل، اختيار العميل، توقيع المندوب، ثم عرض رصيد العميل بعد السند
 class ReceiptScreen extends StatefulWidget {
   final Receipt? existing;
-  const ReceiptScreen({super.key, this.existing});
+  final Customer? presetCustomer;
+  const ReceiptScreen({super.key, this.existing, this.presetCustomer});
 
   @override
   State<ReceiptScreen> createState() => _ReceiptScreenState();
@@ -60,6 +61,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       app.peekNextReceiptNumber().then((n) {
         if (mounted) setState(() => _docNumberCtrl.text = n);
       });
+      if (widget.presetCustomer != null) {
+        _customer = widget.presetCustomer;
+      }
     }
     _amountCtrl.addListener(_recalc);
     _recalc();

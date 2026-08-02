@@ -25,12 +25,14 @@ class InvoiceScreen extends StatefulWidget {
   final InvoiceKind kind;
   final bool forceCashCustomer;
   final Invoice? existing;
+  final Customer? presetCustomer;
 
   const InvoiceScreen({
     super.key,
     required this.kind,
     this.forceCashCustomer = false,
     this.existing,
+    this.presetCustomer,
   });
 
   @override
@@ -81,6 +83,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       });
       if (widget.forceCashCustomer) {
         _customer = Customer(id: 'cash_customer', name: 'عميل نقدي');
+      } else if (widget.presetCustomer != null) {
+        _customer = widget.presetCustomer;
       }
     }
     _recalcBalance();
