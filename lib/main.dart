@@ -76,12 +76,20 @@ class CadySalesApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: app.settings.darkMode ? ThemeMode.dark : ThemeMode.light,
+            theme: AppTheme.light(seedColor: app.settings.appThemeColor),
+            darkTheme: AppTheme.dark(seedColor: app.settings.appThemeColor),
+            themeMode: switch (app.settings.themeModePref) {
+              'dark' => ThemeMode.dark,
+              'system' => ThemeMode.system,
+              _ => ThemeMode.light,
+            },
             builder: (context, child) => Directionality(
               textDirection: TextDirection.rtl,
-              child: child!,
+              child: MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(app.settings.appFontScale)),
+                child: child!,
+              ),
             ),
             home: app.loading
                 ? const Scaffold(body: Center(child: CircularProgressIndicator()))
@@ -124,7 +132,10 @@ class CadySalesApp extends StatelessWidget {
   }
 }
 
-/// يتحقق من وجود كلمة مرور مفعّلة قبل عرض التطبيق
+/// يتحقق من وجود كلمة مرور مفعّلة قبل عرض التطبيق، ويعيد القفل تلقائيًا
+/// بعد مدة الخمول المحددة بالإعدادات، ويغطي المحتوى بشاشة محايدة (الشعار
+/// فقط) عند التبديل لتطبيق آخر إن كان خيار "إخفاء الأرقام المالية" مفعّلًا
+/// — حتى لا تظهر أرقام حساسة بمصغّرة قائمة التطبيقات الأخيرة (Recents).
 class AppGate extends StatefulWidget {
   const AppGate({super.key});
 
@@ -132,14 +143,23 @@ class AppGate extends StatefulWidget {
   State<AppGate> createState() => _AppGateState();
 }
 
-class _AppGateState extends State<AppGate> {
+class _AppGateState extends State<AppGate> with WidgetsBindingObserver {
   bool? _needsUnlock;
   String? _error;
+  DateTime? _pausedAt;
+  bool _covered = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _check();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _check() async {
@@ -149,6 +169,32 @@ class _AppGateState extends State<AppGate> {
     } catch (e) {
       debugPrint('AppGate._check() failed: $e');
       if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final app = context.read<AppProvider>();
+    final settings = app.settings;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _pausedAt ??= DateTime.now();
+      if (settings.hideAmountsInRecents && mounted) {
+        setState(() => _covered = true);
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (_covered && mounted) setState(() => _covered = false);
+      final pausedAt = _pausedAt;
+      _pausedAt = null;
+      if (pausedAt == null || _needsUnlock == false) return;
+      final minutes = settings.autoLockMinutes;
+      if (minutes < 0) return; // "أبدًا" — لا قفل تلقائي
+      final elapsedSeconds = DateTime.now().difference(pausedAt).inSeconds;
+      final thresholdSeconds = minutes == 0 ? 0 : minutes * 60;
+      if (elapsedSeconds >= thresholdSeconds && mounted) {
+        AuthService.instance.isPasswordSet().then((set) {
+          if (set && mounted) setState(() => _needsUnlock = true);
+        });
+      }
     }
   }
 
@@ -169,6 +215,11 @@ class _AppGateState extends State<AppGate> {
     }
     if (_needsUnlock == true) {
       return LockScreen(onUnlocked: () => setState(() => _needsUnlock = false));
+    }
+    if (_covered) {
+      return const Scaffold(
+        body: Center(child: Icon(Icons.storefront, size: 72, color: Colors.grey)),
+      );
     }
     return const RootNav();
   }

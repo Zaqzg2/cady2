@@ -12,6 +12,7 @@ import '../models/receipt.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
+import '../services/save_feedback.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/signature_pad_widget.dart';
@@ -64,6 +65,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       if (widget.presetCustomer != null) {
         _customer = widget.presetCustomer;
       }
+      // توقيع المندوب الافتراضي المحفوظ بالإعدادات (بدل توقيعه يدويًا بكل
+      // سند من جديد) — يقدر يعيد التوقيع من داخل الشاشة لو احتاج تغييره.
+      _repSignaturePath ??= app.settings.repSignaturePath;
     }
     _amountCtrl.addListener(_recalc);
     _recalc();
@@ -151,8 +155,10 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (r == null) return;
     setState(() => _saving = true);
     try {
-      await context.read<AppProvider>().saveReceipt(r);
+      final app = context.read<AppProvider>();
+      await app.saveReceipt(r);
       if (mounted) {
+        SaveFeedback.play(app.settings);
         _snack('تم حفظ السند بنجاح');
         Navigator.pop(context);
       }

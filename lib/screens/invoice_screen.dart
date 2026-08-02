@@ -14,6 +14,7 @@ import '../models/invoice_item.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
+import '../services/save_feedback.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/quantity_selector.dart';
@@ -184,8 +185,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     setState(() => _saving = true);
     try {
       final inv = _buildInvoice();
-      await context.read<AppProvider>().saveInvoice(inv);
+      final app = context.read<AppProvider>();
+      await app.saveInvoice(inv);
       if (mounted) {
+        SaveFeedback.play(app.settings);
         _snack('تم حفظ الفاتورة بنجاح');
         Navigator.pop(context);
       }

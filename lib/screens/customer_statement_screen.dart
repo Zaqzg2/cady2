@@ -56,6 +56,7 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
   @override
   void initState() {
     super.initState();
+    _format80mm = context.read<AppProvider>().settings.defaultStatement80mm;
     _reload();
     _scrollController.addListener(_onScroll);
   }
@@ -92,7 +93,7 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
     final app = context.read<AppProvider>();
     return _format80mm
         ? PdfService.instance
-            .generateStatementPdf80mm(widget.customer.name, _entries, app.settings)
+            .generateStatementPdf80mm(widget.customer, _entries, app.settings)
         : PdfService.instance
             .generateStatementPdf(widget.customer.name, _entries, app.settings);
   }
