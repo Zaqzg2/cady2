@@ -149,30 +149,49 @@ class CustomersScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
     return Scaffold(
-      appBar: AppBar(title: const Text('العملاء')),
+      appBar: AppBar(
+        title: const Text('العملاء'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'تحديث القائمة',
+            onPressed: () => context.read<AppProvider>().reloadCustomers(),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _editCustomer(context, null),
         child: const Icon(Icons.add),
       ),
-      body: app.customers.isEmpty
-          ? const Center(child: Text('لا يوجد عملاء بعد — اضغط + للإضافة'))
-          : ListView.builder(
-              padding: const EdgeInsets.only(top: 4, bottom: 90),
-              itemCount: app.customers.length,
-              itemBuilder: (ctx, i) => _CustomerCard(
-                customer: app.customers[i],
-                onTap: () => _openProfile(context, app.customers[i]),
-                onLongPressStart: (details) =>
-                    _showRadialMenu(context, details.globalPosition, app.customers[i]),
-                onCall: () => _call(context, app.customers[i]),
-                onWhatsapp: () => _whatsapp(context, app.customers[i]),
-                onNewInvoice: () => _newInvoice(context, app.customers[i]),
-                onNewReceipt: () => _newReceipt(context, app.customers[i]),
-                onEdit: () => _editCustomer(context, app.customers[i]),
-                onDelete: () => _confirmDelete(context, app.customers[i]),
-                onTogglePin: () => app.togglePinned(app.customers[i]),
+      body: RefreshIndicator(
+        onRefresh: () => context.read<AppProvider>().reloadCustomers(),
+        child: app.customers.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 160),
+                  Center(child: Text('لا يوجد عملاء بعد — اضغط + للإضافة')),
+                ],
+              )
+            : ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.only(top: 4, bottom: 90),
+                itemCount: app.customers.length,
+                itemBuilder: (ctx, i) => _CustomerCard(
+                  customer: app.customers[i],
+                  onTap: () => _openProfile(context, app.customers[i]),
+                  onLongPressStart: (details) =>
+                      _showRadialMenu(context, details.globalPosition, app.customers[i]),
+                  onCall: () => _call(context, app.customers[i]),
+                  onWhatsapp: () => _whatsapp(context, app.customers[i]),
+                  onNewInvoice: () => _newInvoice(context, app.customers[i]),
+                  onNewReceipt: () => _newReceipt(context, app.customers[i]),
+                  onEdit: () => _editCustomer(context, app.customers[i]),
+                  onDelete: () => _confirmDelete(context, app.customers[i]),
+                  onTogglePin: () => app.togglePinned(app.customers[i]),
+                ),
               ),
-            ),
+      ),
     );
   }
 }

@@ -12,7 +12,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/customer.dart';
 import '../models/doc_row.dart';
 import '../providers/app_provider.dart';
-import '../screens/customer_statement_screen.dart';
+import '../screens/customer_profile_screen.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/pdf_preview_screen.dart';
 import '../screens/receipt_screen.dart';
@@ -215,8 +215,8 @@ mixin DocumentRowActions<T extends StatefulWidget> on State<T> {
     final app = context.read<AppProvider>();
     final customer = app.customers.firstWhere((c) => c.id == row.customerId,
         orElse: () => Customer(id: row.customerId, name: row.customerName));
-    await Navigator.push(context,
-        MaterialPageRoute(builder: (_) => CustomerStatementScreen(customer: customer)));
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => CustomerProfileScreen(customer: customer)));
   }
 
   Future<void> confirmDeleteRow(DocRow row, {VoidCallback? onDone}) async {

@@ -78,8 +78,16 @@ Future<bool> showEditCustomerDialog(BuildContext context, Customer? existing) as
       creditLimit: double.tryParse(creditLimitCtrl.text) ?? 0,
     );
     if (context.mounted) {
-      await context.read<AppProvider>().saveCustomer(c);
-      return true;
+      try {
+        await context.read<AppProvider>().saveCustomer(c);
+        return true;
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('تعذّر حفظ العميل: $e')));
+        }
+        return false;
+      }
     }
   }
   return false;

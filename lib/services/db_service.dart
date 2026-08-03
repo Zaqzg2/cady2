@@ -124,9 +124,26 @@ class DbService {
 
   Future<List<Customer>> getCustomers() async {
     final d = await db;
-    final rows = await d.query('customers',
-        orderBy: 'isPinned DESC, name COLLATE NOCASE');
-    return rows.map((r) => Customer.fromMap(r)).toList();
+    final rows = await d.query('customers');
+    final list = <Customer>[];
+    for (final r in rows) {
+      try {
+        list.add(Customer.fromMap(r));
+      } catch (e) {
+        // نتجاهل صفًا تالفًا واحدًا بدل ما نُسقط قائمة العملاء بالكامل —
+        // لو صف واحد فيه بيانات غير متوقعة (مثلاً NULL بمكان غير متوقع)
+        // فالسلوك القديم كان يرمي استثناء عند .map().toList() فيختفي كل
+        // العملاء دفعة واحدة بسبب صف واحد فقط.
+        // ignore: avoid_print
+        print('DbService.getCustomers: تجاهل صف عميل تالف: $e  |  row=$r');
+      }
+    }
+    // الترتيب في Dart بدل SQL (COLLATE) لتفادي أي اختلاف سلوك بين أجهزة
+    list.sort((a, b) {
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
   }
 
   // ---------------- المنتجات ----------------

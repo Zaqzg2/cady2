@@ -46,12 +46,35 @@ class AppProvider extends ChangeNotifier {
   // ---------------- عملاء ----------------
   Future<void> saveCustomer(Customer c) async {
     await DbService.instance.upsertCustomer(c);
-    customers = await DbService.instance.getCustomers();
-    notifyListeners();
+    try {
+      customers = await DbService.instance.getCustomers();
+    } catch (e) {
+      // حتى لو فشلت إعادة التحميل الكاملة لأي سبب، نضيف/نحدّث العميل محليًا
+      // يدويًا حتى لا "يختفي" من القائمة رغم أنه فعليًا انحفظ بقاعدة البيانات.
+      final idx = customers.indexWhere((x) => x.id == c.id);
+      if (idx >= 0) {
+        customers[idx] = c;
+      } else {
+        customers = [...customers, c];
+      }
+      rethrow;
+    } finally {
+      notifyListeners();
+    }
   }
 
   Future<void> deleteCustomer(String id) async {
     await DbService.instance.deleteCustomer(id);
+    customers = customers.where((c) => c.id != id).toList();
+    try {
+      customers = await DbService.instance.getCustomers();
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  /// إعادة تحميل يدوية لقائمة العملاء من قاعدة البيانات (Pull to Refresh)
+  Future<void> reloadCustomers() async {
     customers = await DbService.instance.getCustomers();
     notifyListeners();
   }
