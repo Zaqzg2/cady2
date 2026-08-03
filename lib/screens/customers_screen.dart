@@ -277,7 +277,7 @@ class _CustomerCard extends StatelessWidget {
     required this.onTogglePin,
   });
 
-  Color _avatarColor(BuildContext context) =>
+  MaterialColor _avatarColor(BuildContext context) =>
       Colors.primaries[customer.name.hashCode % Colors.primaries.length];
 
   @override
