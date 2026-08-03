@@ -20,6 +20,7 @@ import '../services/pdf_service.dart';
 import '../services/print_service.dart';
 import '../services/document_output_service.dart';
 import '../utils/formatters.dart';
+import '../widgets/customer_edit_dialog.dart';
 import '../widgets/document_actions_row.dart';
 import 'invoice_screen.dart';
 import 'receipt_screen.dart';
@@ -102,6 +103,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
   Future<void> _togglePin() async {
     await context.read<AppProvider>().togglePinned(_customer);
     _reload();
+  }
+
+  Future<void> _editCustomer() async {
+    final saved = await showEditCustomerDialog(context, _customer);
+    if (saved) _reload();
   }
 
   // ---------------- كشف الحساب الكامل ----------------
@@ -441,6 +447,11 @@ class _CustomerProfileScreenState extends State<CustomerProfileScreen> {
       appBar: AppBar(
         title: Text(_customer.name),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'تعديل بيانات العميل',
+            onPressed: _editCustomer,
+          ),
           IconButton(
             icon: Icon(_customer.isPinned ? Icons.star : Icons.star_border,
                 color: _customer.isPinned ? Colors.amber : null),

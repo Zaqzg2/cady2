@@ -22,7 +22,7 @@ class DbService {
   Future<Database> _initDb() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'cady_sales.db');
-    return openDatabase(
+    final database = await openDatabase(
       path,
       version: 2,
       onCreate: (db, version) async {
@@ -72,22 +72,42 @@ class DbService {
           )
         ''');
       },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await db.execute('ALTER TABLE customers ADD COLUMN isPinned INTEGER DEFAULT 0');
-          await db.execute('ALTER TABLE customers ADD COLUMN isStopped INTEGER DEFAULT 0');
-          await db.execute('ALTER TABLE customers ADD COLUMN creditLimit REAL DEFAULT 0');
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS customer_notes (
-              id TEXT PRIMARY KEY,
-              customerId TEXT,
-              date TEXT,
-              text TEXT
-            )
-          ''');
-        }
-      },
+      // onUpgrade يُترك فارغًا عمدًا: الاعتماد فقط على رقم إصدار قاعدة
+      // البيانات لتحديد الأعمدة الناقصة قد يفشل لو تعطّلت ترقية سابقة في
+      // منتصف الطريق (مثلاً: تمت إضافة عمود واحد ثم انهار التطبيق قبل
+      // إكمال البقية، بينما رقم الإصدار سُجِّل كأن الترقية اكتملت).
+      // بدلها نستخدم _ensureSchema أدناه الذي يتحقق من وجود كل عمود/جدول
+      // فعليًا قبل إضافته — آمن ويعمل بشكل صحيح حتى لو استُدعي أكثر من مرة.
+      onUpgrade: (db, oldVersion, newVersion) async {},
     );
+    await _ensureSchema(database);
+    return database;
+  }
+
+  /// يتحقق من وجود كل عمود/جدول جديد فعليًا (عبر PRAGMA table_info) ويضيفه
+  /// فقط إن كان ناقصًا، بدل الاعتماد على onUpgrade وحده. هذا يمنع أي تعطّل
+  /// بسبب "duplicate column" لو كانت قاعدة البيانات بحالة غير مكتملة من
+  /// محاولة ترقية سابقة، ويجعل فتح التطبيق يُصلح نفسه تلقائيًا في كل مرة.
+  Future<void> _ensureSchema(Database db) async {
+    await _ensureColumn(db, 'customers', 'isPinned', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'customers', 'isStopped', 'INTEGER DEFAULT 0');
+    await _ensureColumn(db, 'customers', 'creditLimit', 'REAL DEFAULT 0');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS customer_notes (
+        id TEXT PRIMARY KEY,
+        customerId TEXT,
+        date TEXT,
+        text TEXT
+      )
+    ''');
+  }
+
+  Future<void> _ensureColumn(Database db, String table, String column, String ddl) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    final exists = info.any((row) => row['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $ddl');
+    }
   }
 
   // ---------------- العملاء ----------------
