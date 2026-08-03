@@ -159,6 +159,7 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة — تحقق من الإعدادات')));
+    if (ok) await _markFlag(e, printed: true);
   }
 
   Future<void> _shareEntry(LedgerEntry e) async {
@@ -169,6 +170,26 @@ class _CustomerStatementScreenState extends State<CustomerStatementScreen> {
     await file.writeAsBytes(bytes);
     await SharePlus.instance.share(
         ShareParams(files: [XFile(file.path)], text: '${e.description} #${e.docNumber}'));
+    await _markFlag(e, shared: true);
+  }
+
+  /// يحدّث حالتي "مطبوع/مُرسل" على الفاتورة أو السند نفسه (تظهر كشارات
+  /// في سجل الفواتير والسندات وقسم "آخر العمليات" بالصفحة الرئيسية).
+  Future<void> _markFlag(LedgerEntry e, {bool? printed, bool? shared}) async {
+    final app = context.read<AppProvider>();
+    if (e.docType == LedgerDocType.invoiceSale || e.docType == LedgerDocType.invoiceReturn) {
+      final inv = await app.getInvoiceById(e.docId);
+      if (inv == null) return;
+      if (printed != null) inv.printed = printed;
+      if (shared != null) inv.shared = shared;
+      await app.updateInvoiceFlags(inv);
+    } else if (e.docType == LedgerDocType.receipt) {
+      final r = await app.getReceiptById(e.docId);
+      if (r == null) return;
+      if (printed != null) r.printed = printed;
+      if (shared != null) r.shared = shared;
+      await app.updateReceiptFlags(r);
+    }
   }
 
   Future<void> _downloadEntry(LedgerEntry e) async {

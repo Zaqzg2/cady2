@@ -6,6 +6,7 @@ import '../models/customer.dart';
 import '../models/product.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
+import '../models/customer_note.dart';
 
 /// طبقة الوصول لقاعدة بيانات SQLite المحلية (كل شيء يُخزَّن على الجهاز)
 class DbService {
@@ -23,7 +24,7 @@ class DbService {
     final path = join(dbPath, 'cady_sales.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE customers (
@@ -31,7 +32,10 @@ class DbService {
             name TEXT NOT NULL,
             phone TEXT,
             address TEXT,
-            openingBalance REAL DEFAULT 0
+            openingBalance REAL DEFAULT 0,
+            isPinned INTEGER DEFAULT 0,
+            isStopped INTEGER DEFAULT 0,
+            creditLimit REAL DEFAULT 0
           )
         ''');
         await db.execute('''
@@ -59,6 +63,29 @@ class DbService {
             data TEXT
           )
         ''');
+        await db.execute('''
+          CREATE TABLE customer_notes (
+            id TEXT PRIMARY KEY,
+            customerId TEXT,
+            date TEXT,
+            text TEXT
+          )
+        ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE customers ADD COLUMN isPinned INTEGER DEFAULT 0');
+          await db.execute('ALTER TABLE customers ADD COLUMN isStopped INTEGER DEFAULT 0');
+          await db.execute('ALTER TABLE customers ADD COLUMN creditLimit REAL DEFAULT 0');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS customer_notes (
+              id TEXT PRIMARY KEY,
+              customerId TEXT,
+              date TEXT,
+              text TEXT
+            )
+          ''');
+        }
       },
     );
   }
@@ -77,7 +104,8 @@ class DbService {
 
   Future<List<Customer>> getCustomers() async {
     final d = await db;
-    final rows = await d.query('customers', orderBy: 'name COLLATE NOCASE');
+    final rows = await d.query('customers',
+        orderBy: 'isPinned DESC, name COLLATE NOCASE');
     return rows.map((r) => Customer.fromMap(r)).toList();
   }
 
@@ -174,6 +202,25 @@ class DbService {
     final rows = await d.query('receipts', where: 'id = ?', whereArgs: [id]);
     if (rows.isEmpty) return null;
     return Receipt.fromMap(jsonDecode(rows.first['data'] as String));
+  }
+
+  // ---------------- ملاحظات العميل ----------------
+  Future<void> insertNote(CustomerNote n) async {
+    final d = await db;
+    await d.insert('customer_notes', n.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteNote(String id) async {
+    final d = await db;
+    await d.delete('customer_notes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<CustomerNote>> getNotes(String customerId) async {
+    final d = await db;
+    final rows = await d.query('customer_notes',
+        where: 'customerId = ?', whereArgs: [customerId], orderBy: 'date DESC');
+    return rows.map((r) => CustomerNote.fromMap(r)).toList();
   }
 
   // ---------------- حساب رصيد العميل ----------------

@@ -80,9 +80,10 @@ class _RadialMenuOverlayState extends State<_RadialMenuOverlay>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    const radius = 82.0;
-    const itemSize = 52.0;
     final n = widget.actions.length;
+    // نصف قطر يكبر تلقائيًا كلما زاد عدد الإجراءات لتفادي تداخل الأيقونات
+    final radius = 82.0 + (n > 4 ? (n - 4) * 16.0 : 0.0);
+    const itemSize = 52.0;
     // نصف دائرة تفتح للأعلى غالبًا، وللأسفل لو نقطة الضغط قريبة من أعلى
     // الشاشة حتى لا تخرج الأيقونات خارج حدود العرض.
     final openUp = widget.center.dy > size.height * 0.32;

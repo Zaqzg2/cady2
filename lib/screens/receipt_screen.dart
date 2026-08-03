@@ -22,7 +22,11 @@ import '../widgets/signature_pad_widget.dart';
 class ReceiptScreen extends StatefulWidget {
   final Receipt? existing;
   final Customer? presetCustomer;
-  const ReceiptScreen({super.key, this.existing, this.presetCustomer});
+  /// عند تمريرها، تُفتح الشاشة كسند جديد لكن بمبلغ/طريقة/ملاحظات هذا السند
+  /// (إجراء "تكرار").
+  final Receipt? duplicateFrom;
+  const ReceiptScreen(
+      {super.key, this.existing, this.presetCustomer, this.duplicateFrom});
 
   @override
   State<ReceiptScreen> createState() => _ReceiptScreenState();
@@ -64,6 +68,16 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       });
       if (widget.presetCustomer != null) {
         _customer = widget.presetCustomer;
+      }
+      final dup = widget.duplicateFrom;
+      if (dup != null) {
+        _amountCtrl.text = dup.amount.toString();
+        _method = dup.method;
+        _notesCtrl.text = dup.notes;
+        if (widget.presetCustomer == null) {
+          _customer = app.customers.firstWhere((c) => c.id == dup.customerId,
+              orElse: () => Customer(id: dup.customerId, name: dup.customerName));
+        }
       }
       // توقيع المندوب الافتراضي المحفوظ بالإعدادات (بدل توقيعه يدويًا بكل
       // سند من جديد) — يقدر يعيد التوقيع من داخل الشاشة لو احتاج تغييره.

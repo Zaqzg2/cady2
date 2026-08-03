@@ -27,6 +27,9 @@ class InvoiceScreen extends StatefulWidget {
   final bool forceCashCustomer;
   final Invoice? existing;
   final Customer? presetCustomer;
+  /// عند تمريرها، تُفتح الشاشة كفاتورة جديدة (رقم/تاريخ جديدان) لكن
+  /// مع تعبئة الأصناف والعميل والخصم من هذه الفاتورة (إجراء "تكرار").
+  final Invoice? duplicateFrom;
 
   const InvoiceScreen({
     super.key,
@@ -34,6 +37,7 @@ class InvoiceScreen extends StatefulWidget {
     this.forceCashCustomer = false,
     this.existing,
     this.presetCustomer,
+    this.duplicateFrom,
   });
 
   @override
@@ -86,6 +90,24 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
         _customer = Customer(id: 'cash_customer', name: 'عميل نقدي');
       } else if (widget.presetCustomer != null) {
         _customer = widget.presetCustomer;
+      }
+      final dup = widget.duplicateFrom;
+      if (dup != null) {
+        for (final it in dup.items) {
+          _items[it.productId] = InvoiceItem(
+              productId: it.productId,
+              productName: it.productName,
+              price: it.price,
+              quantity: it.quantity);
+        }
+        _discountPercentCtrl.text = dup.discountPercent.toString();
+        _discountAmountCtrl.text = dup.discountAmount.toString();
+        _notesCtrl.text = dup.notes;
+        _paymentMode = dup.paymentMode;
+        if (widget.presetCustomer == null && !widget.forceCashCustomer) {
+          _customer = app.customers.firstWhere((c) => c.id == dup.customerId,
+              orElse: () => Customer(id: dup.customerId, name: dup.customerName));
+        }
       }
     }
     _recalcBalance();

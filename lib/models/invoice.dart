@@ -18,6 +18,9 @@ class Invoice {
   String? signaturePath; // مسار صورة توقيع العميل (PNG)
   double balanceAfter; // رصيد مديونية العميل بعد هذه الفاتورة
   DateTime createdAt;
+  bool printed; // تمت طباعتها مرة واحدة على الأقل
+  bool shared; // تمت مشاركتها/إرسالها مرة واحدة على الأقل
+  bool pinned; // مثبّتة أعلى سجل الفواتير والسندات
 
   Invoice({
     required this.id,
@@ -34,6 +37,9 @@ class Invoice {
     this.signaturePath,
     this.balanceAfter = 0,
     DateTime? createdAt,
+    this.printed = false,
+    this.shared = false,
+    this.pinned = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   double get subTotal => items.fold(0.0, (sum, it) => sum + it.total);
@@ -66,6 +72,9 @@ class Invoice {
         'signaturePath': signaturePath,
         'balanceAfter': balanceAfter,
         'createdAt': createdAt.toIso8601String(),
+        'printed': printed,
+        'shared': shared,
+        'pinned': pinned,
       };
 
   factory Invoice.fromMap(Map<String, dynamic> m) => Invoice(
@@ -86,5 +95,8 @@ class Invoice {
         signaturePath: m['signaturePath'] as String?,
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
         createdAt: DateTime.parse(m['createdAt'] as String),
+        printed: m['printed'] as bool? ?? false,
+        shared: m['shared'] as bool? ?? false,
+        pinned: m['pinned'] as bool? ?? false,
       );
 }

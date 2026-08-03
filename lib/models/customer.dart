@@ -4,6 +4,9 @@ class Customer {
   String phone;
   String address;
   double openingBalance; // رصيد افتتاحي (مديونية سابقة)
+  bool isPinned; // تثبيت العميل أعلى القائمة
+  bool isStopped; // حالة العميل: نشط (false) / متوقف (true)
+  double creditLimit; // الحد الائتماني المسموح به (0 = بدون حد)
 
   Customer({
     required this.id,
@@ -11,6 +14,9 @@ class Customer {
     this.phone = '',
     this.address = '',
     this.openingBalance = 0,
+    this.isPinned = false,
+    this.isStopped = false,
+    this.creditLimit = 0,
   });
 
   Map<String, dynamic> toMap() => {
@@ -19,6 +25,9 @@ class Customer {
         'phone': phone,
         'address': address,
         'openingBalance': openingBalance,
+        'isPinned': isPinned ? 1 : 0,
+        'isStopped': isStopped ? 1 : 0,
+        'creditLimit': creditLimit,
       };
 
   factory Customer.fromMap(Map<String, dynamic> m) => Customer(
@@ -27,5 +36,8 @@ class Customer {
         phone: m['phone'] as String? ?? '',
         address: m['address'] as String? ?? '',
         openingBalance: (m['openingBalance'] as num?)?.toDouble() ?? 0,
+        isPinned: ((m['isPinned'] as num?) ?? 0) != 0,
+        isStopped: ((m['isStopped'] as num?) ?? 0) != 0,
+        creditLimit: (m['creditLimit'] as num?)?.toDouble() ?? 0,
       );
 }
