@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,6 +12,7 @@ import '../models/customer_stats.dart';
 import '../services/db_service.dart';
 import '../services/numbering_service.dart';
 import '../services/settings_service.dart';
+import '../services/auto_backup_service.dart';
 
 /// المزوّد المركزي لحالة التطبيق: عملاء، منتجات، إعدادات، وعمليات
 /// حفظ الفواتير/السندات مع حساب المديونية والترقيم التلقائي
@@ -31,6 +33,9 @@ class AppProvider extends ChangeNotifier {
       customers = await DbService.instance.getCustomers();
       products = await DbService.instance.getProducts();
       settings = await SettingsService.instance.load();
+      // نسخ احتياطي تلقائي (يومي/أسبوعي) إن كان مفعّلاً وحان وقته — فشله
+      // لا يجب أن يمنع فتح التطبيق، لذا يُعالَج بصمت داخليًا
+      unawaited(AutoBackupService.runIfDue(settings));
     } catch (e, st) {
       // نطبع الخطأ بالتفصيل في السجل (logcat) ونحفظه لعرضه في الواجهة أيضاً
       // بدل ترك المستخدم أمام شاشة بيضاء بلا أي توضيح لسبب التعليق.

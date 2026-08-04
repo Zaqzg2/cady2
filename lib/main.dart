@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'providers/app_provider.dart';
+import 'models/company_settings.dart';
 import 'theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/customers_screen.dart';
@@ -12,6 +13,33 @@ import 'screens/products_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/lock_screen.dart';
 import 'services/auth_service.dart';
+import 'widgets/privacy_cover_overlay.dart';
+
+/// يحسب أقصر مدة خمول مؤدّية لقفل التطبيق تلقائيًا، بين خيار "القفل
+/// التلقائي" و"تسجيل الخروج التلقائي" (أيهما أقصر يُطبَّق أولاً)، أو
+/// null إن كان كلاهما معطّلاً
+Duration? effectiveLockDuration(CompanySettings s) {
+  Duration? fromAutoLock;
+  switch (s.autoLockOption) {
+    case AutoLockOption.immediate:
+      fromAutoLock = Duration.zero;
+      break;
+    case AutoLockOption.oneMinute:
+      fromAutoLock = const Duration(minutes: 1);
+      break;
+    case AutoLockOption.fiveMinutes:
+      fromAutoLock = const Duration(minutes: 5);
+      break;
+    case AutoLockOption.never:
+      fromAutoLock = null;
+      break;
+  }
+  final fromLogout =
+      s.autoLogoutHours > 0 ? Duration(hours: s.autoLogoutHours) : null;
+  if (fromAutoLock == null) return fromLogout;
+  if (fromLogout == null) return fromAutoLock;
+  return fromAutoLock < fromLogout ? fromAutoLock : fromLogout;
+}
 
 void main() {
   // نلتقط أي خطأ غير متوقّع في أي مكان بالتطبيق (بما فيه أخطاء غير متزامنة)
@@ -76,12 +104,20 @@ class CadySalesApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: app.settings.darkMode ? ThemeMode.dark : ThemeMode.light,
+            theme: AppTheme.light(seedColor: app.settings.themeColor),
+            darkTheme: AppTheme.dark(seedColor: app.settings.themeColor),
+            themeMode: switch (app.settings.themeMode) {
+              AppThemeMode.system => ThemeMode.system,
+              AppThemeMode.light => ThemeMode.light,
+              AppThemeMode.dark => ThemeMode.dark,
+            },
             builder: (context, child) => Directionality(
               textDirection: TextDirection.rtl,
-              child: child!,
+              child: MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(app.settings.appFontScale)),
+                child: child!,
+              ),
             ),
             home: app.loading
                 ? const Scaffold(body: Center(child: CircularProgressIndicator()))
@@ -132,14 +168,44 @@ class AppGate extends StatefulWidget {
   State<AppGate> createState() => _AppGateState();
 }
 
-class _AppGateState extends State<AppGate> {
+class _AppGateState extends State<AppGate> with WidgetsBindingObserver {
   bool? _needsUnlock;
   String? _error;
+  DateTime? _pausedAt;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _check();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _pausedAt ??= DateTime.now();
+      return;
+    }
+    final pausedAt = _pausedAt;
+    _pausedAt = null;
+    if (pausedAt != null) _maybeLock(pausedAt);
+  }
+
+  Future<void> _maybeLock(DateTime pausedAt) async {
+    final isSet = await AuthService.instance.isPasswordSet();
+    if (!isSet || !mounted) return;
+    final settings = context.read<AppProvider>().settings;
+    final threshold = effectiveLockDuration(settings);
+    if (threshold == null) return;
+    if (DateTime.now().difference(pausedAt) >= threshold) {
+      if (mounted) setState(() => _needsUnlock = true);
+    }
   }
 
   Future<void> _check() async {
@@ -170,7 +236,7 @@ class _AppGateState extends State<AppGate> {
     if (_needsUnlock == true) {
       return LockScreen(onUnlocked: () => setState(() => _needsUnlock = false));
     }
-    return const RootNav();
+    return const PrivacyCoverOverlay(child: RootNav());
   }
 }
 

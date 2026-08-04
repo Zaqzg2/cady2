@@ -12,6 +12,7 @@ import '../models/receipt.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
+import '../services/feedback_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/signature_pad_widget.dart';
@@ -58,6 +59,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     } else {
       _id = _uuid.v4();
       _date = DateTime.now();
+      // توقيع افتراضي محفوظ للمندوب من الإعدادات، بدل توقيعه يدويًا بكل سند
+      _repSignaturePath = app.settings.defaultRepSignaturePath;
       app.peekNextReceiptNumber().then((n) {
         if (mounted) setState(() => _docNumberCtrl.text = n);
       });
@@ -153,6 +156,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     try {
       await context.read<AppProvider>().saveReceipt(r);
       if (mounted) {
+        FeedbackService.onSaved(context);
         _snack('تم حفظ السند بنجاح');
         Navigator.pop(context);
       }

@@ -50,6 +50,7 @@ class PdfService {
   );
 
   pw.Widget _header(CompanySettings s, {required String docTitle}) {
+    final scale = s.invoiceBodyFontSize / 9.0;
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
@@ -61,16 +62,16 @@ class PdfService {
           ),
         pw.Text(
           s.companyName,
-          style: pw.TextStyle(font: _arabicFontBold, fontSize: 13),
+          style: pw.TextStyle(font: _arabicFontBold, fontSize: 13 * scale),
           textDirection: pw.TextDirection.rtl,
         ),
         if (s.companyPhone.isNotEmpty)
           pw.Text(s.companyPhone,
-              style: pw.TextStyle(font: _arabicFont, fontSize: 8),
+              style: pw.TextStyle(font: _arabicFont, fontSize: 8 * scale),
               textDirection: pw.TextDirection.rtl),
         if (s.companyAddress.isNotEmpty)
           pw.Text(s.companyAddress,
-              style: pw.TextStyle(font: _arabicFont, fontSize: 8),
+              style: pw.TextStyle(font: _arabicFont, fontSize: 8 * scale),
               textDirection: pw.TextDirection.rtl),
         pw.Padding(
           padding: const pw.EdgeInsets.symmetric(vertical: 5),
@@ -78,24 +79,26 @@ class PdfService {
         ),
         pw.Text(
           docTitle,
-          style: pw.TextStyle(font: _arabicFontBold, fontSize: 11),
+          style: pw.TextStyle(font: _arabicFontBold, fontSize: 11 * scale),
           textDirection: pw.TextDirection.rtl,
         ),
       ],
     );
   }
 
-  pw.Widget _kv(String k, String v, {double fontSize = 9}) {
+  pw.Widget _kv(String k, String v, CompanySettings s, {double? fontSize}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+      padding: pw.EdgeInsets.symmetric(vertical: 1.5 * s.invoiceLineSpacing),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
           pw.Text(v,
-              style: pw.TextStyle(font: _arabicFont, fontSize: fontSize),
+              style: pw.TextStyle(
+                  font: _arabicFont, fontSize: fontSize ?? s.invoiceBodyFontSize),
               textDirection: pw.TextDirection.rtl),
           pw.Text(k,
-              style: pw.TextStyle(font: _arabicFont, fontSize: fontSize),
+              style: pw.TextStyle(
+                  font: _arabicFont, fontSize: fontSize ?? s.invoiceBodyFontSize),
               textDirection: pw.TextDirection.rtl),
         ],
       ),
@@ -120,11 +123,11 @@ class PdfService {
             children: [
               _header(settings, docTitle: title),
               pw.SizedBox(height: 4),
-              _kv('رقم الفاتورة', inv.docNumber),
-              _kv('التاريخ', df.format(inv.date)),
-              _kv('العميل', inv.customerName),
+              _kv('رقم الفاتورة', inv.docNumber, settings),
+              _kv('التاريخ', df.format(inv.date), settings),
+              _kv('العميل', inv.customerName, settings),
               _kv('نوع الدفع',
-                  inv.paymentMode == PaymentMode.cash ? 'نقدًا' : 'آجل'),
+                  inv.paymentMode == PaymentMode.cash ? 'نقدًا' : 'آجل', settings),
               pw.Divider(thickness: 0.5),
               pw.Table(
                 border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey700),
@@ -186,14 +189,14 @@ class PdfService {
               ),
               pw.SizedBox(height: 4),
               pw.Divider(thickness: 0.5),
-              _kv('الإجمالي الفرعي', _currency.format(inv.subTotal)),
+              _kv('الإجمالي الفرعي', _currency.format(inv.subTotal), settings),
               if (inv.discountValue > 0)
-                _kv('الخصم', _currency.format(inv.discountValue)),
-              _kv('الإجمالي النهائي', _currency.format(inv.grandTotal),
-                  fontSize: 11),
+                _kv('الخصم', _currency.format(inv.discountValue), settings),
+              _kv('الإجمالي النهائي', _currency.format(inv.grandTotal), settings,
+                  fontSize: 11 * (settings.invoiceBodyFontSize / 9.0)),
               pw.Divider(thickness: 0.5),
               _kv('رصيد العميل بعد الفاتورة',
-                  _currency.format(inv.balanceAfter)),
+                  _currency.format(inv.balanceAfter), settings),
               if (inv.notes.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text('ملاحظات:',
@@ -218,8 +221,10 @@ class PdfService {
               ],
               pw.SizedBox(height: 6),
               pw.Center(
-                child: pw.Text('شكرًا لتعاملكم معنا',
-                    style: pw.TextStyle(font: _arabicFont, fontSize: 8),
+                child: pw.Text(settings.invoiceFooterText,
+                    style: pw.TextStyle(
+                        font: _arabicFont,
+                        fontSize: 8 * (settings.invoiceBodyFontSize / 9.0)),
                     textDirection: pw.TextDirection.rtl),
               ),
             ],
@@ -245,15 +250,16 @@ class PdfService {
             children: [
               _header(settings, docTitle: 'سند قبض'),
               pw.SizedBox(height: 4),
-              _kv('رقم السند', r.docNumber),
-              _kv('التاريخ', df.format(r.date)),
-              _kv('العميل', r.customerName),
+              _kv('رقم السند', r.docNumber, settings),
+              _kv('التاريخ', df.format(r.date), settings),
+              _kv('العميل', r.customerName, settings),
               _kv('طريقة الدفع',
-                  r.method == ReceiptMethod.cash ? 'نقدًا' : 'تحويل'),
+                  r.method == ReceiptMethod.cash ? 'نقدًا' : 'تحويل', settings),
               pw.Divider(thickness: 0.5),
-              _kv('المبلغ المستلم', _currency.format(r.amount), fontSize: 12),
+              _kv('المبلغ المستلم', _currency.format(r.amount), settings,
+                  fontSize: 12 * (settings.invoiceBodyFontSize / 9.0)),
               pw.Divider(thickness: 0.5),
-              _kv('رصيد العميل بعد السند', _currency.format(r.balanceAfter)),
+              _kv('رصيد العميل بعد السند', _currency.format(r.balanceAfter), settings),
               if (r.notes.isNotEmpty) ...[
                 pw.SizedBox(height: 4),
                 pw.Text(r.notes,
@@ -275,8 +281,10 @@ class PdfService {
               ],
               pw.SizedBox(height: 6),
               pw.Center(
-                child: pw.Text('شكرًا لتعاملكم معنا',
-                    style: pw.TextStyle(font: _arabicFont, fontSize: 8),
+                child: pw.Text(settings.invoiceFooterText,
+                    style: pw.TextStyle(
+                        font: _arabicFont,
+                        fontSize: 8 * (settings.invoiceBodyFontSize / 9.0)),
                     textDirection: pw.TextDirection.rtl),
               ),
             ],
@@ -311,9 +319,12 @@ class PdfService {
       }
     }
 
+    final pageFormat = settings.defaultStatementFormat == StatementFormat.thermal80
+        ? PdfPageFormat.roll80
+        : PdfPageFormat.a4;
     doc.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageFormat: pageFormat,
         margin: const pw.EdgeInsets.all(24),
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -385,7 +396,7 @@ class PdfService {
           ),
           pw.SizedBox(height: 12),
           if (entries.isNotEmpty)
-            _kv('الرصيد الحالي', _currency.format(entries.last.runningBalance),
+            _kv('الرصيد الحالي', _currency.format(entries.last.runningBalance), settings,
                 fontSize: 12),
         ],
       ),
