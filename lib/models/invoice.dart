@@ -17,6 +17,9 @@ class Invoice {
   String notes;
   String? signaturePath; // مسار صورة توقيع العميل (PNG)
   double balanceAfter; // رصيد مديونية العميل بعد هذه الفاتورة
+  bool isPrinted; // هل طُبعت هذه الفاتورة من قبل
+  bool isShared; // هل شُوركت (واتساب/مشاركة) من قبل
+  bool isPinned; // تثبيت الفاتورة أعلى سجل المستندات
   DateTime createdAt;
 
   Invoice({
@@ -33,6 +36,9 @@ class Invoice {
     this.notes = '',
     this.signaturePath,
     this.balanceAfter = 0,
+    this.isPrinted = false,
+    this.isShared = false,
+    this.isPinned = false,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -65,6 +71,9 @@ class Invoice {
         'notes': notes,
         'signaturePath': signaturePath,
         'balanceAfter': balanceAfter,
+        'isPrinted': isPrinted,
+        'isShared': isShared,
+        'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -85,6 +94,9 @@ class Invoice {
         notes: m['notes'] as String? ?? '',
         signaturePath: m['signaturePath'] as String?,
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
+        isPrinted: (m['isPrinted'] as bool?) ?? false,
+        isShared: (m['isShared'] as bool?) ?? false,
+        isPinned: (m['isPinned'] as bool?) ?? false,
         createdAt: DateTime.parse(m['createdAt'] as String),
       );
 }

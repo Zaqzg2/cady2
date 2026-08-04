@@ -11,6 +11,9 @@ class Receipt {
   String? repSignaturePath; // توقيع المندوب
   String notes;
   double balanceAfter;
+  bool isPrinted;
+  bool isShared;
+  bool isPinned;
   DateTime createdAt;
 
   Receipt({
@@ -24,6 +27,9 @@ class Receipt {
     this.repSignaturePath,
     this.notes = '',
     this.balanceAfter = 0,
+    this.isPrinted = false,
+    this.isShared = false,
+    this.isPinned = false,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -38,6 +44,9 @@ class Receipt {
         'repSignaturePath': repSignaturePath,
         'notes': notes,
         'balanceAfter': balanceAfter,
+        'isPrinted': isPrinted,
+        'isShared': isShared,
+        'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -52,6 +61,9 @@ class Receipt {
         repSignaturePath: m['repSignaturePath'] as String?,
         notes: m['notes'] as String? ?? '',
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
+        isPrinted: (m['isPrinted'] as bool?) ?? false,
+        isShared: (m['isShared'] as bool?) ?? false,
+        isPinned: (m['isPinned'] as bool?) ?? false,
         createdAt: DateTime.parse(m['createdAt'] as String),
       );
 }

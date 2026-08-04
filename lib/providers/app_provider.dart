@@ -190,6 +190,69 @@ class AppProvider extends ChangeNotifier {
   Future<Invoice?> getInvoiceById(String id) => DbService.instance.getInvoiceById(id);
   Future<Receipt?> getReceiptById(String id) => DbService.instance.getReceiptById(id);
 
+  /// تعليم فاتورة/سند كمطبوع أو كمُشارَك، أو تثبيته أعلى سجل المستندات —
+  /// بدون إعادة حساب الرصيد (على عكس saveInvoice/saveReceipt)
+  Future<void> markInvoicePrinted(String id) async {
+    final inv = await DbService.instance.getInvoiceById(id);
+    if (inv == null) return;
+    inv.isPrinted = true;
+    await DbService.instance.upsertInvoice(inv);
+    notifyListeners();
+  }
+
+  Future<void> markInvoiceShared(String id) async {
+    final inv = await DbService.instance.getInvoiceById(id);
+    if (inv == null) return;
+    inv.isShared = true;
+    await DbService.instance.upsertInvoice(inv);
+    notifyListeners();
+  }
+
+  Future<void> toggleInvoicePinned(String id) async {
+    final inv = await DbService.instance.getInvoiceById(id);
+    if (inv == null) return;
+    inv.isPinned = !inv.isPinned;
+    await DbService.instance.upsertInvoice(inv);
+    notifyListeners();
+  }
+
+  Future<void> markReceiptPrinted(String id) async {
+    final r = await DbService.instance.getReceiptById(id);
+    if (r == null) return;
+    r.isPrinted = true;
+    await DbService.instance.upsertReceipt(r);
+    notifyListeners();
+  }
+
+  Future<void> markReceiptShared(String id) async {
+    final r = await DbService.instance.getReceiptById(id);
+    if (r == null) return;
+    r.isShared = true;
+    await DbService.instance.upsertReceipt(r);
+    notifyListeners();
+  }
+
+  Future<void> toggleReceiptPinned(String id) async {
+    final r = await DbService.instance.getReceiptById(id);
+    if (r == null) return;
+    r.isPinned = !r.isPinned;
+    await DbService.instance.upsertReceipt(r);
+    notifyListeners();
+  }
+
+  /// آخر N عملية (فواتير + سندات) عبر كل العملاء، مرتبة تنازليًا حسب التاريخ
+  Future<List<dynamic>> getRecentDocuments({int limit = 5}) async {
+    final invoices = await DbService.instance.getInvoices();
+    final receipts = await DbService.instance.getReceipts();
+    final all = <dynamic>[...invoices, ...receipts];
+    all.sort((a, b) {
+      final da = a is Invoice ? a.date : (a as Receipt).date;
+      final db = b is Invoice ? b.date : (b as Receipt).date;
+      return db.compareTo(da);
+    });
+    return all.take(limit).toList();
+  }
+
   // ---------------- حفظ سند قبض ----------------
   Future<void> saveReceipt(Receipt r) async {
     final baseBalance =
