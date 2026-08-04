@@ -7,8 +7,7 @@ import '../models/invoice.dart';
 import '../models/receipt.dart';
 import '../models/company_settings.dart';
 import '../models/ledger_entry.dart';
-import '../models/customer_summary.dart';
-import '../models/customer_note.dart';
+import '../models/customer_stats.dart';
 import '../services/db_service.dart';
 import '../services/numbering_service.dart';
 import '../services/settings_service.dart';
@@ -46,49 +45,72 @@ class AppProvider extends ChangeNotifier {
   // ---------------- عملاء ----------------
   Future<void> saveCustomer(Customer c) async {
     await DbService.instance.upsertCustomer(c);
-    try {
-      customers = await DbService.instance.getCustomers();
-    } catch (e) {
-      // حتى لو فشلت إعادة التحميل الكاملة لأي سبب، نضيف/نحدّث العميل محليًا
-      // يدويًا حتى لا "يختفي" من القائمة رغم أنه فعليًا انحفظ بقاعدة البيانات.
-      final idx = customers.indexWhere((x) => x.id == c.id);
-      if (idx >= 0) {
-        customers[idx] = c;
-      } else {
-        customers = [...customers, c];
-      }
-      rethrow;
-    } finally {
-      notifyListeners();
-    }
+    customers = await DbService.instance.getCustomers();
+    notifyListeners();
   }
 
   Future<void> deleteCustomer(String id) async {
     await DbService.instance.deleteCustomer(id);
-    customers = customers.where((c) => c.id != id).toList();
-    try {
-      customers = await DbService.instance.getCustomers();
-    } finally {
-      notifyListeners();
-    }
-  }
-
-  /// إعادة تحميل يدوية لقائمة العملاء من قاعدة البيانات (Pull to Refresh)
-  Future<void> reloadCustomers() async {
     customers = await DbService.instance.getCustomers();
     notifyListeners();
   }
 
   Customer newCashCustomer() => Customer(id: _uuid.v4(), name: 'عميل نقدي');
 
-  Future<void> togglePinned(Customer c) async {
-    c.isPinned = !c.isPinned;
-    await saveCustomer(c);
+  Future<void> togglePinCustomer(String id) async {
+    final idx = customers.indexWhere((c) => c.id == id);
+    if (idx == -1) return;
+    customers[idx].isPinned = !customers[idx].isPinned;
+    await DbService.instance.upsertCustomer(customers[idx]);
+    customers = await DbService.instance.getCustomers();
+    notifyListeners();
   }
 
-  Future<void> toggleStopped(Customer c) async {
-    c.isStopped = !c.isStopped;
-    await saveCustomer(c);
+  /// ملخّص محسوب للعميل: الرصيد، عدد الفواتير، إجمالي المقبوض والمرتجع،
+  /// وتاريخ آخر نشاط ورقم آخر فاتورة — تُستخدم في بطاقة العميل وصفحته
+  Future<CustomerStats> getCustomerStats(String customerId) async {
+    final c = customers.firstWhere((c) => c.id == customerId,
+        orElse: () => Customer(id: customerId, name: ''));
+    final invoices = await DbService.instance.getInvoices(customerId: customerId);
+    final receipts = await DbService.instance.getReceipts(customerId: customerId);
+
+    double balance = c.openingBalance;
+    double received = 0;
+    double returns = 0;
+    int salesCount = 0;
+    DateTime? lastActivity;
+    String? lastInvoiceNumber;
+    DateTime? lastInvoiceDate;
+
+    for (final inv in invoices) {
+      balance += inv.effect;
+      if (inv.kind == InvoiceKind.sale) salesCount++;
+      if (inv.kind == InvoiceKind.saleReturn) returns += inv.grandTotal;
+      if (lastActivity == null || inv.date.isAfter(lastActivity)) {
+        lastActivity = inv.date;
+      }
+      if (lastInvoiceDate == null || inv.date.isAfter(lastInvoiceDate)) {
+        lastInvoiceDate = inv.date;
+        lastInvoiceNumber = inv.docNumber;
+      }
+    }
+    for (final r in receipts) {
+      balance -= r.amount;
+      received += r.amount;
+      if (lastActivity == null || r.date.isAfter(lastActivity)) {
+        lastActivity = r.date;
+      }
+    }
+
+    return CustomerStats(
+      balance: balance,
+      invoicesCount: salesCount,
+      receivedTotal: received,
+      returnsTotal: returns,
+      lastActivityDate: lastActivity,
+      lastInvoiceNumber: lastInvoiceNumber,
+      lastInvoiceDate: lastInvoiceDate,
+    );
   }
 
   // ---------------- منتجات ----------------
@@ -148,67 +170,6 @@ class AppProvider extends ChangeNotifier {
     return balance;
   }
 
-  /// ملخص مجمّع للعميل: الرصيد + آخر زيارة + آخر فاتورة + إجماليات المؤشرات.
-  /// يُستخدم في بطاقة العميل وصفحته بدل استدعاءات منفصلة متعددة.
-  Future<CustomerSummary> getCustomerSummary(String customerId) async {
-    final c = customers.firstWhere((c) => c.id == customerId,
-        orElse: () => Customer(id: customerId, name: ''));
-    final invoices = await DbService.instance.getInvoices(customerId: customerId);
-    final receipts = await DbService.instance.getReceipts(customerId: customerId);
-
-    double balance = c.openingBalance;
-    double received = 0;
-    double returns = 0;
-    int saleCount = 0;
-    DateTime? lastActivity;
-    DateTime? lastSaleDate;
-    String? lastInvoiceNumber;
-
-    for (final inv in invoices) {
-      balance += inv.effect;
-      if (inv.kind == InvoiceKind.saleReturn) {
-        returns += inv.grandTotal;
-      } else {
-        saleCount++;
-        if (lastSaleDate == null || inv.date.isAfter(lastSaleDate)) {
-          lastSaleDate = inv.date;
-          lastInvoiceNumber = inv.docNumber;
-        }
-      }
-      if (lastActivity == null || inv.date.isAfter(lastActivity)) lastActivity = inv.date;
-    }
-    for (final r in receipts) {
-      balance -= r.amount;
-      received += r.amount;
-      if (lastActivity == null || r.date.isAfter(lastActivity)) lastActivity = r.date;
-    }
-
-    return CustomerSummary(
-      balance: balance,
-      lastActivity: lastActivity,
-      lastInvoiceNumber: lastInvoiceNumber,
-      invoiceCount: saleCount,
-      receivedTotal: received,
-      returnsTotal: returns,
-    );
-  }
-
-  // ---------------- ملاحظات العميل ----------------
-  Future<List<CustomerNote>> getCustomerNotes(String customerId) =>
-      DbService.instance.getNotes(customerId);
-
-  Future<void> addCustomerNote(String customerId, String text) async {
-    final n = CustomerNote(
-        id: _uuid.v4(), customerId: customerId, date: DateTime.now(), text: text.trim());
-    await DbService.instance.insertNote(n);
-    notifyListeners();
-  }
-
-  Future<void> deleteCustomerNote(String id) async {
-    await DbService.instance.deleteNote(id);
-    notifyListeners();
-  }
-
   // ---------------- حفظ فاتورة ----------------
   Future<void> saveInvoice(Invoice inv) async {
     final baseBalance = await getCustomerBalanceExcluding(inv.customerId,
@@ -228,18 +189,6 @@ class AppProvider extends ChangeNotifier {
 
   Future<Invoice?> getInvoiceById(String id) => DbService.instance.getInvoiceById(id);
   Future<Receipt?> getReceiptById(String id) => DbService.instance.getReceiptById(id);
-
-  /// تحديث سريع لحالات الفاتورة (طباعة/مشاركة/تثبيت) بدون إعادة حساب
-  /// الرصيد أو لمس ترقيم المستندات — يُستخدم من سجل الفواتير والسندات.
-  Future<void> updateInvoiceFlags(Invoice inv) async {
-    await DbService.instance.upsertInvoice(inv);
-    notifyListeners();
-  }
-
-  Future<void> updateReceiptFlags(Receipt r) async {
-    await DbService.instance.upsertReceipt(r);
-    notifyListeners();
-  }
 
   // ---------------- حفظ سند قبض ----------------
   Future<void> saveReceipt(Receipt r) async {

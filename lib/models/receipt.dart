@@ -12,9 +12,6 @@ class Receipt {
   String notes;
   double balanceAfter;
   DateTime createdAt;
-  bool printed;
-  bool shared;
-  bool pinned;
 
   Receipt({
     required this.id,
@@ -28,9 +25,6 @@ class Receipt {
     this.notes = '',
     this.balanceAfter = 0,
     DateTime? createdAt,
-    this.printed = false,
-    this.shared = false,
-    this.pinned = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
@@ -45,9 +39,6 @@ class Receipt {
         'notes': notes,
         'balanceAfter': balanceAfter,
         'createdAt': createdAt.toIso8601String(),
-        'printed': printed,
-        'shared': shared,
-        'pinned': pinned,
       };
 
   factory Receipt.fromMap(Map<String, dynamic> m) => Receipt(
@@ -62,8 +53,5 @@ class Receipt {
         notes: m['notes'] as String? ?? '',
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
         createdAt: DateTime.parse(m['createdAt'] as String),
-        printed: m['printed'] as bool? ?? false,
-        shared: m['shared'] as bool? ?? false,
-        pinned: m['pinned'] as bool? ?? false,
       );
 }

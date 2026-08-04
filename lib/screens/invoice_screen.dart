@@ -14,7 +14,6 @@ import '../models/invoice_item.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
-import '../services/save_feedback.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/quantity_selector.dart';
@@ -26,18 +25,14 @@ class InvoiceScreen extends StatefulWidget {
   final InvoiceKind kind;
   final bool forceCashCustomer;
   final Invoice? existing;
-  final Customer? presetCustomer;
-  /// عند تمريرها، تُفتح الشاشة كفاتورة جديدة (رقم/تاريخ جديدان) لكن
-  /// مع تعبئة الأصناف والعميل والخصم من هذه الفاتورة (إجراء "تكرار").
-  final Invoice? duplicateFrom;
+  final Customer? initialCustomer;
 
   const InvoiceScreen({
     super.key,
     required this.kind,
     this.forceCashCustomer = false,
     this.existing,
-    this.presetCustomer,
-    this.duplicateFrom,
+    this.initialCustomer,
   });
 
   @override
@@ -88,26 +83,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       });
       if (widget.forceCashCustomer) {
         _customer = Customer(id: 'cash_customer', name: 'عميل نقدي');
-      } else if (widget.presetCustomer != null) {
-        _customer = widget.presetCustomer;
-      }
-      final dup = widget.duplicateFrom;
-      if (dup != null) {
-        for (final it in dup.items) {
-          _items[it.productId] = InvoiceItem(
-              productId: it.productId,
-              productName: it.productName,
-              price: it.price,
-              quantity: it.quantity);
-        }
-        _discountPercentCtrl.text = dup.discountPercent.toString();
-        _discountAmountCtrl.text = dup.discountAmount.toString();
-        _notesCtrl.text = dup.notes;
-        _paymentMode = dup.paymentMode;
-        if (widget.presetCustomer == null && !widget.forceCashCustomer) {
-          _customer = app.customers.firstWhere((c) => c.id == dup.customerId,
-              orElse: () => Customer(id: dup.customerId, name: dup.customerName));
-        }
+      } else if (widget.initialCustomer != null) {
+        _customer = widget.initialCustomer;
       }
     }
     _recalcBalance();
@@ -207,10 +184,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     setState(() => _saving = true);
     try {
       final inv = _buildInvoice();
-      final app = context.read<AppProvider>();
-      await app.saveInvoice(inv);
+      await context.read<AppProvider>().saveInvoice(inv);
       if (mounted) {
-        SaveFeedback.play(app.settings);
         _snack('تم حفظ الفاتورة بنجاح');
         Navigator.pop(context);
       }

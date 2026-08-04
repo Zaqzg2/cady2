@@ -12,7 +12,6 @@ import '../models/receipt.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
-import '../services/save_feedback.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/signature_pad_widget.dart';
@@ -21,12 +20,8 @@ import '../widgets/signature_pad_widget.dart';
 /// للتعديل، اختيار العميل، توقيع المندوب، ثم عرض رصيد العميل بعد السند
 class ReceiptScreen extends StatefulWidget {
   final Receipt? existing;
-  final Customer? presetCustomer;
-  /// عند تمريرها، تُفتح الشاشة كسند جديد لكن بمبلغ/طريقة/ملاحظات هذا السند
-  /// (إجراء "تكرار").
-  final Receipt? duplicateFrom;
-  const ReceiptScreen(
-      {super.key, this.existing, this.presetCustomer, this.duplicateFrom});
+  final Customer? initialCustomer;
+  const ReceiptScreen({super.key, this.existing, this.initialCustomer});
 
   @override
   State<ReceiptScreen> createState() => _ReceiptScreenState();
@@ -66,22 +61,9 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       app.peekNextReceiptNumber().then((n) {
         if (mounted) setState(() => _docNumberCtrl.text = n);
       });
-      if (widget.presetCustomer != null) {
-        _customer = widget.presetCustomer;
+      if (widget.initialCustomer != null) {
+        _customer = widget.initialCustomer;
       }
-      final dup = widget.duplicateFrom;
-      if (dup != null) {
-        _amountCtrl.text = dup.amount.toString();
-        _method = dup.method;
-        _notesCtrl.text = dup.notes;
-        if (widget.presetCustomer == null) {
-          _customer = app.customers.firstWhere((c) => c.id == dup.customerId,
-              orElse: () => Customer(id: dup.customerId, name: dup.customerName));
-        }
-      }
-      // توقيع المندوب الافتراضي المحفوظ بالإعدادات (بدل توقيعه يدويًا بكل
-      // سند من جديد) — يقدر يعيد التوقيع من داخل الشاشة لو احتاج تغييره.
-      _repSignaturePath ??= app.settings.repSignaturePath;
     }
     _amountCtrl.addListener(_recalc);
     _recalc();
@@ -169,10 +151,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (r == null) return;
     setState(() => _saving = true);
     try {
-      final app = context.read<AppProvider>();
-      await app.saveReceipt(r);
+      await context.read<AppProvider>().saveReceipt(r);
       if (mounted) {
-        SaveFeedback.play(app.settings);
         _snack('تم حفظ السند بنجاح');
         Navigator.pop(context);
       }

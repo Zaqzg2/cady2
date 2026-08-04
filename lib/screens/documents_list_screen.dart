@@ -1,20 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../models/doc_row.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
+import '../providers/app_provider.dart';
 import '../services/db_service.dart';
-import '../utils/document_row_actions.dart';
-import '../widgets/doc_card.dart';
+import '../utils/formatters.dart';
+import 'invoice_screen.dart';
+import 'receipt_screen.dart';
 
-/// سجل موحّد لكل الفواتير والسندات.
-/// - بطاقة مضغوطة: أيقونة دائرية 48×48، اسم/رقم المستند، اسم العميل،
-///   التاريخ والوقت، الرصيد بعد العملية، وزرا "تفاصيل/طباعة" سريعين.
-/// - ضغطة واحدة: تفتح تفاصيل المستند (شاشة التعديل).
-/// - ضغط على الأيقونة: معاينة سريعة للمستند.
-/// - ضغط مطوّل: قائمة إجراءات كاملة.
-/// - سحب يمين (جزئي): معاينة/طباعة/مشاركة. سحب يسار: تعديل/تكرار/حذف.
-/// - سحب لأسفل: تحديث السجل (Pull to Refresh).
+/// سجل موحّد لكل الفواتير والسندات، مع تعديل/طباعة/حذف مباشرة
 class DocumentsListScreen extends StatefulWidget {
   const DocumentsListScreen({super.key});
 
@@ -22,8 +17,7 @@ class DocumentsListScreen extends StatefulWidget {
   State<DocumentsListScreen> createState() => _DocumentsListScreenState();
 }
 
-class _DocumentsListScreenState extends State<DocumentsListScreen>
-    with DocumentRowActions<DocumentsListScreen> {
+class _DocumentsListScreenState extends State<DocumentsListScreen> {
   String _filter = 'all'; // all / sale / return / receipt
   List<Invoice> _invoices = [];
   List<Receipt> _receipts = [];
@@ -39,24 +33,32 @@ class _DocumentsListScreenState extends State<DocumentsListScreen>
     setState(() => _loading = true);
     _invoices = await DbService.instance.getInvoices();
     _receipts = await DbService.instance.getReceipts();
-    if (mounted) setState(() => _loading = false);
+    setState(() => _loading = false);
+  }
+
+  Future<void> _deleteInvoice(Invoice inv) async {
+    await context.read<AppProvider>().deleteInvoice(inv.id);
+    _load();
+  }
+
+  Future<void> _deleteReceipt(Receipt r) async {
+    await context.read<AppProvider>().deleteReceipt(r.id);
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
-    final items = <DocRow>[
+    // دمج المستندين في قائمة واحدة مرتبة بالتاريخ تنازليًا
+    final items = <_DocRow>[
       if (_filter == 'all' || _filter == 'sale' || _filter == 'return')
         ..._invoices
             .where((i) => _filter == 'all' ||
                 (_filter == 'sale' && i.kind == InvoiceKind.sale) ||
                 (_filter == 'return' && i.kind == InvoiceKind.saleReturn))
-            .map((i) => DocRow.invoice(i)),
+            .map((i) => _DocRow.invoice(i)),
       if (_filter == 'all' || _filter == 'receipt')
-        ..._receipts.map((r) => DocRow.receipt(r)),
-    ]..sort((a, b) {
-        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-        return b.date.compareTo(a.date);
-      });
+        ..._receipts.map((r) => _DocRow.receipt(r)),
+    ]..sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(
       appBar: AppBar(
@@ -81,36 +83,63 @@ class _DocumentsListScreenState extends State<DocumentsListScreen>
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: items.isEmpty
-                  ? ListView(
-                      children: const [
-                        SizedBox(height: 120),
-                        Center(child: Text('لا توجد مستندات بعد')),
-                      ],
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: items.length,
-                      itemBuilder: (ctx, i) {
-                        final row = items[i];
-                        return DocCard(
-                          row: row,
-                          onTap: () => editRow(row, onDone: _load),
-                          onIconTap: () => quickPreviewRow(row, onDone: _load),
-                          onLongPress: () => longPressMenuRow(row, onDone: _load),
-                          onDetails: () => openStatementAfter(row),
-                          onPrint: () => printRow(row, onDone: () => setState(() {})),
-                          onQuickPreview: () => quickPreviewRow(row, onDone: _load),
-                          onShare: () => shareRow(row, onDone: () => setState(() {})),
-                          onEdit: () => editRow(row, onDone: _load),
-                          onDuplicate: () => duplicateRow(row, onDone: _load),
-                          onDelete: () => confirmDeleteRow(row, onDone: _load),
-                        );
-                      },
-                    ),
-            ),
+          : items.isEmpty
+              ? const Center(child: Text('لا توجد مستندات بعد'))
+              : ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (ctx, i) {
+                    final row = items[i];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: row.color.withOpacity(0.15),
+                          child: Icon(row.icon, color: row.color),
+                        ),
+                        title: Text('${row.title}  #${row.docNumber}'),
+                        subtitle: Text('${row.customerName} • ${Formatters.d(row.date)}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(Formatters.money(row.amount),
+                                style: const TextStyle(fontWeight: FontWeight.bold)),
+                            PopupMenuButton<String>(
+                              onSelected: (v) async {
+                                if (v == 'edit') {
+                                  if (row.invoice != null) {
+                                    await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) => InvoiceScreen(
+                                                kind: row.invoice!.kind,
+                                                existing: row.invoice)));
+                                  } else if (row.receipt != null) {
+                                    await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                ReceiptScreen(existing: row.receipt)));
+                                  }
+                                  _load();
+                                } else if (v == 'delete') {
+                                  if (row.invoice != null) {
+                                    _deleteInvoice(row.invoice!);
+                                  } else if (row.receipt != null) {
+                                    _deleteReceipt(row.receipt!);
+                                  }
+                                }
+                              },
+                              itemBuilder: (ctx) => const [
+                                PopupMenuItem(value: 'edit', child: Text('تعديل / طباعة')),
+                                PopupMenuItem(value: 'delete', child: Text('حذف')),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
     );
   }
 
@@ -124,4 +153,50 @@ class _DocumentsListScreenState extends State<DocumentsListScreen>
       ),
     );
   }
+}
+
+class _DocRow {
+  final DateTime date;
+  final String title;
+  final String docNumber;
+  final String customerName;
+  final double amount;
+  final Color color;
+  final IconData icon;
+  final Invoice? invoice;
+  final Receipt? receipt;
+
+  _DocRow({
+    required this.date,
+    required this.title,
+    required this.docNumber,
+    required this.customerName,
+    required this.amount,
+    required this.color,
+    required this.icon,
+    this.invoice,
+    this.receipt,
+  });
+
+  factory _DocRow.invoice(Invoice i) => _DocRow(
+        date: i.date,
+        title: i.kind == InvoiceKind.sale ? 'فاتورة بيع' : 'فاتورة مرتجع',
+        docNumber: i.docNumber,
+        customerName: i.customerName,
+        amount: i.grandTotal,
+        color: i.kind == InvoiceKind.sale ? Colors.green : Colors.red,
+        icon: i.kind == InvoiceKind.sale ? Icons.point_of_sale : Icons.assignment_return,
+        invoice: i,
+      );
+
+  factory _DocRow.receipt(Receipt r) => _DocRow(
+        date: r.date,
+        title: 'سند قبض',
+        docNumber: r.docNumber,
+        customerName: r.customerName,
+        amount: r.amount,
+        color: Colors.amber.shade800,
+        icon: Icons.payments,
+        receipt: r,
+      );
 }
