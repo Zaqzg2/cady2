@@ -1,198 +1,143 @@
-import 'dart:convert';
-import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 
 import '../models/customer.dart';
 import '../models/product.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
 
-/// طبقة الوصول لقاعدة بيانات SQLite المحلية (كل شيء يُخزَّن على الجهاز)
+/// طبقة الوصول لقاعدة بيانات التطبيق — Hive بالكامل (nosql محلي سريع
+/// يعمل بنفس الطريقة على الجوال والويب عبر IndexedDB). كل سجل يُخزَّن
+/// كـ Map بنفس صيغة toMap()/fromMap() الموجودة أصلاً بكل موديل، بالمفتاح
+/// id — بدون أي TypeAdapter لأن كل القيم أصلاً أنواع أساسية
+/// (String/num/bool/List/Map) يدعمها Hive مباشرة.
 class DbService {
   DbService._();
   static final DbService instance = DbService._();
-  Database? _db;
 
-  Future<Database> get db async {
-    _db ??= await _initDb();
-    return _db!;
+  static const _customersBoxName = 'customers';
+  static const _productsBoxName = 'products';
+  static const _invoicesBoxName = 'invoices';
+  static const _receiptsBoxName = 'receipts';
+
+  bool _ready = false;
+  late Box _customersBox;
+  late Box _productsBox;
+  late Box _invoicesBox;
+  late Box _receiptsBox;
+
+  Future<void> _ensureReady() async {
+    if (_ready) return;
+    await Hive.initFlutter();
+    _customersBox = await Hive.openBox(_customersBoxName);
+    _productsBox = await Hive.openBox(_productsBoxName);
+    _invoicesBox = await Hive.openBox(_invoicesBoxName);
+    _receiptsBox = await Hive.openBox(_receiptsBoxName);
+    _ready = true;
   }
 
-  Future<Database> _initDb() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'cady_sales.db');
-    return openDatabase(
-      path,
-      version: 2,
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE customers (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            phone TEXT,
-            address TEXT,
-            openingBalance REAL DEFAULT 0,
-            isPinned INTEGER DEFAULT 0,
-            isActive INTEGER DEFAULT 1,
-            creditLimit REAL DEFAULT 0,
-            notes TEXT DEFAULT ''
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE products (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            price REAL NOT NULL,
-            unit TEXT,
-            imagePath TEXT
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE invoices (
-            id TEXT PRIMARY KEY,
-            docNumber TEXT,
-            date TEXT,
-            data TEXT
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE receipts (
-            id TEXT PRIMARY KEY,
-            docNumber TEXT,
-            date TEXT,
-            data TEXT
-          )
-        ''');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          // ترقية جدول العملاء لدعم التثبيت، الحالة، الحد الائتماني والملاحظات
-          // دون فقدان أي بيانات موجودة
-          await db.execute(
-              "ALTER TABLE customers ADD COLUMN isPinned INTEGER DEFAULT 0");
-          await db.execute(
-              "ALTER TABLE customers ADD COLUMN isActive INTEGER DEFAULT 1");
-          await db.execute(
-              "ALTER TABLE customers ADD COLUMN creditLimit REAL DEFAULT 0");
-          await db.execute(
-              "ALTER TABLE customers ADD COLUMN notes TEXT DEFAULT ''");
-        }
-      },
-    );
-  }
+  /// يحوّل أي Map يعيدها Hive (قد تكون Map<dynamic, dynamic> وقت التشغيل)
+  /// إلى Map<String, dynamic> التي تتوقعها دوال fromMap() في كل موديل
+  Map<String, dynamic> _asStringMap(dynamic raw) =>
+      Map<String, dynamic>.from(raw as Map);
 
   // ---------------- العملاء ----------------
   Future<void> upsertCustomer(Customer c) async {
-    final d = await db;
-    await d.insert('customers', c.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _ensureReady();
+    await _customersBox.put(c.id, c.toMap());
   }
 
   Future<void> deleteCustomer(String id) async {
-    final d = await db;
-    await d.delete('customers', where: 'id = ?', whereArgs: [id]);
+    await _ensureReady();
+    await _customersBox.delete(id);
   }
 
   Future<List<Customer>> getCustomers() async {
-    final d = await db;
-    final rows = await d.query('customers',
-        orderBy: 'isPinned DESC, name COLLATE NOCASE');
-    return rows.map((r) => Customer.fromMap(r)).toList();
+    await _ensureReady();
+    final list = _customersBox.values
+        .map((v) => Customer.fromMap(_asStringMap(v)))
+        .toList();
+    list.sort((a, b) {
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
+    return list;
   }
 
   // ---------------- المنتجات ----------------
   Future<void> upsertProduct(Product p) async {
-    final d = await db;
-    await d.insert('products', p.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await _ensureReady();
+    await _productsBox.put(p.id, p.toMap());
   }
 
   Future<void> deleteProduct(String id) async {
-    final d = await db;
-    await d.delete('products', where: 'id = ?', whereArgs: [id]);
+    await _ensureReady();
+    await _productsBox.delete(id);
   }
 
   Future<List<Product>> getProducts() async {
-    final d = await db;
-    final rows = await d.query('products', orderBy: 'name COLLATE NOCASE');
-    return rows.map((r) => Product.fromMap(r)).toList();
+    await _ensureReady();
+    final list =
+        _productsBox.values.map((v) => Product.fromMap(_asStringMap(v))).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list;
   }
 
   // ---------------- الفواتير ----------------
   Future<void> upsertInvoice(Invoice inv) async {
-    final d = await db;
-    await d.insert(
-      'invoices',
-      {
-        'id': inv.id,
-        'docNumber': inv.docNumber,
-        'date': inv.date.toIso8601String(),
-        'data': jsonEncode(inv.toMap()),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _ensureReady();
+    await _invoicesBox.put(inv.id, inv.toMap());
   }
 
   Future<void> deleteInvoice(String id) async {
-    final d = await db;
-    await d.delete('invoices', where: 'id = ?', whereArgs: [id]);
+    await _ensureReady();
+    await _invoicesBox.delete(id);
   }
 
   Future<List<Invoice>> getInvoices({String? customerId}) async {
-    final d = await db;
-    final rows = await d.query('invoices', orderBy: 'date DESC');
-    final list = rows
-        .map((r) => Invoice.fromMap(jsonDecode(r['data'] as String)))
-        .toList();
+    await _ensureReady();
+    var list =
+        _invoicesBox.values.map((v) => Invoice.fromMap(_asStringMap(v))).toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
     if (customerId != null) {
-      return list.where((i) => i.customerId == customerId).toList();
+      list = list.where((i) => i.customerId == customerId).toList();
     }
     return list;
   }
 
   Future<Invoice?> getInvoiceById(String id) async {
-    final d = await db;
-    final rows = await d.query('invoices', where: 'id = ?', whereArgs: [id]);
-    if (rows.isEmpty) return null;
-    return Invoice.fromMap(jsonDecode(rows.first['data'] as String));
+    await _ensureReady();
+    final v = _invoicesBox.get(id);
+    if (v == null) return null;
+    return Invoice.fromMap(_asStringMap(v));
   }
 
   // ---------------- السندات ----------------
   Future<void> upsertReceipt(Receipt r) async {
-    final d = await db;
-    await d.insert(
-      'receipts',
-      {
-        'id': r.id,
-        'docNumber': r.docNumber,
-        'date': r.date.toIso8601String(),
-        'data': jsonEncode(r.toMap()),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await _ensureReady();
+    await _receiptsBox.put(r.id, r.toMap());
   }
 
   Future<void> deleteReceipt(String id) async {
-    final d = await db;
-    await d.delete('receipts', where: 'id = ?', whereArgs: [id]);
+    await _ensureReady();
+    await _receiptsBox.delete(id);
   }
 
   Future<List<Receipt>> getReceipts({String? customerId}) async {
-    final d = await db;
-    final rows = await d.query('receipts', orderBy: 'date DESC');
-    final list =
-        rows.map((r) => Receipt.fromMap(jsonDecode(r['data'] as String))).toList();
+    await _ensureReady();
+    var list =
+        _receiptsBox.values.map((v) => Receipt.fromMap(_asStringMap(v))).toList();
+    list.sort((a, b) => b.date.compareTo(a.date));
     if (customerId != null) {
-      return list.where((r) => r.customerId == customerId).toList();
+      list = list.where((r) => r.customerId == customerId).toList();
     }
     return list;
   }
 
   Future<Receipt?> getReceiptById(String id) async {
-    final d = await db;
-    final rows = await d.query('receipts', where: 'id = ?', whereArgs: [id]);
-    if (rows.isEmpty) return null;
-    return Receipt.fromMap(jsonDecode(rows.first['data'] as String));
+    await _ensureReady();
+    final v = _receiptsBox.get(id);
+    if (v == null) return null;
+    return Receipt.fromMap(_asStringMap(v));
   }
 
   // ---------------- حساب رصيد العميل ----------------

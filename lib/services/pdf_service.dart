@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:intl/intl.dart';
@@ -9,6 +8,7 @@ import '../models/company_settings.dart';
 import '../models/invoice.dart';
 import '../models/ledger_entry.dart';
 import '../models/receipt.dart';
+import 'image_store.dart';
 
 /// توليد ملفات PDF حقيقية بعرض 80مم مطابقة تمامًا لما تطبعه
 /// الطابعة الحرارية (نفس التخطيط يُستخدم أيضًا لأوامر ESC/POS في print_service).
@@ -16,6 +16,10 @@ import '../models/receipt.dart';
 /// ملاحظة مهمة: لدعم الحروف العربية داخل PDF يجب توفير خط TTF عربي
 /// ضمن assets/fonts/NotoNaskhArabic-Regular.ttf وتسجيله في pubspec.yaml
 /// تحت fonts: — بدون ذلك ستظهر الحروف العربية كمربعات فارغة.
+///
+/// كل صور الشعار/التوقيع تُحمَّل من ImageStore *قبل* بناء المستند، لأن
+/// دوال البناء (build/header) في مكتبة pdf متزامنة (غير async) ولا يمكن
+/// انتظار Future بداخلها مباشرة.
 class PdfService {
   PdfService._();
   static final PdfService instance = PdfService._();
@@ -49,16 +53,17 @@ class PdfService {
     decimalDigits: 0,
   );
 
-  pw.Widget _header(CompanySettings s, {required String docTitle}) {
+  pw.Widget _header(CompanySettings s,
+      {required String docTitle, Uint8List? logoBytes}) {
     final scale = s.invoiceBodyFontSize / 9.0;
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        if (s.logoPath != null && File(s.logoPath!).existsSync())
+        if (logoBytes != null)
           pw.Container(
             height: 55,
             margin: const pw.EdgeInsets.only(bottom: 4),
-            child: pw.Image(pw.MemoryImage(File(s.logoPath!).readAsBytesSync())),
+            child: pw.Image(pw.MemoryImage(logoBytes)),
           ),
         pw.Text(
           s.companyName,
@@ -108,6 +113,8 @@ class PdfService {
   Future<Uint8List> generateInvoicePdf(
       Invoice inv, CompanySettings settings) async {
     await _ensureFonts();
+    final logoBytes = await ImageStore.instance.load(settings.logoPath);
+    final signatureBytes = await ImageStore.instance.load(inv.signaturePath);
     final df = DateFormat('yyyy/MM/dd');
     final title = inv.kind == InvoiceKind.sale ? 'فاتورة بيع' : 'فاتورة مرتجع';
     final visibleCols = settings.tableColumns.where((c) => c.visible).toList();
@@ -121,7 +128,7 @@ class PdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              _header(settings, docTitle: title),
+              _header(settings, docTitle: title, logoBytes: logoBytes),
               pw.SizedBox(height: 4),
               _kv('رقم الفاتورة', inv.docNumber, settings),
               _kv('التاريخ', df.format(inv.date), settings),
@@ -206,8 +213,7 @@ class PdfService {
                     style: pw.TextStyle(font: _arabicFont, fontSize: 8),
                     textDirection: pw.TextDirection.rtl),
               ],
-              if (inv.signaturePath != null &&
-                  File(inv.signaturePath!).existsSync()) ...[
+              if (signatureBytes != null) ...[
                 pw.SizedBox(height: 8),
                 pw.Text('توقيع العميل:',
                     style: pw.TextStyle(font: _arabicFont, fontSize: 8),
@@ -215,8 +221,7 @@ class PdfService {
                 pw.Container(
                   height: 60,
                   alignment: pw.Alignment.center,
-                  child: pw.Image(
-                      pw.MemoryImage(File(inv.signaturePath!).readAsBytesSync())),
+                  child: pw.Image(pw.MemoryImage(signatureBytes)),
                 ),
               ],
               pw.SizedBox(height: 6),
@@ -238,6 +243,8 @@ class PdfService {
   Future<Uint8List> generateReceiptPdf(
       Receipt r, CompanySettings settings) async {
     await _ensureFonts();
+    final logoBytes = await ImageStore.instance.load(settings.logoPath);
+    final signatureBytes = await ImageStore.instance.load(r.repSignaturePath);
     final df = DateFormat('yyyy/MM/dd');
     final doc = pw.Document();
     doc.addPage(
@@ -248,7 +255,7 @@ class PdfService {
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              _header(settings, docTitle: 'سند قبض'),
+              _header(settings, docTitle: 'سند قبض', logoBytes: logoBytes),
               pw.SizedBox(height: 4),
               _kv('رقم السند', r.docNumber, settings),
               _kv('التاريخ', df.format(r.date), settings),
@@ -266,8 +273,7 @@ class PdfService {
                     style: pw.TextStyle(font: _arabicFont, fontSize: 8),
                     textDirection: pw.TextDirection.rtl),
               ],
-              if (r.repSignaturePath != null &&
-                  File(r.repSignaturePath!).existsSync()) ...[
+              if (signatureBytes != null) ...[
                 pw.SizedBox(height: 8),
                 pw.Text('توقيع المندوب:',
                     style: pw.TextStyle(font: _arabicFont, fontSize: 8),
@@ -275,8 +281,7 @@ class PdfService {
                 pw.Container(
                   height: 60,
                   alignment: pw.Alignment.center,
-                  child: pw.Image(pw.MemoryImage(
-                      File(r.repSignaturePath!).readAsBytesSync())),
+                  child: pw.Image(pw.MemoryImage(signatureBytes)),
                 ),
               ],
               pw.SizedBox(height: 6),
@@ -303,6 +308,7 @@ class PdfService {
     CompanySettings settings,
   ) async {
     await _ensureFonts();
+    final logoBytes = await ImageStore.instance.load(settings.logoPath);
     final df = DateFormat('yyyy/MM/dd');
     final doc = pw.Document();
 
@@ -329,7 +335,8 @@ class PdfService {
         header: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
-            _header(settings, docTitle: 'كشف حساب: $customerName'),
+            _header(settings,
+                docTitle: 'كشف حساب: $customerName', logoBytes: logoBytes),
             pw.SizedBox(height: 8),
           ],
         ),

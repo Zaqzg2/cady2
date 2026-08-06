@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/doc_row.dart';
 import '../models/customer.dart';
@@ -14,6 +11,7 @@ import '../models/receipt.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
+import '../services/share_util.dart';
 import '../utils/formatters.dart';
 import '../screens/invoice_screen.dart';
 import '../screens/receipt_screen.dart';
@@ -94,11 +92,9 @@ class DocumentCard extends StatelessWidget {
 
   Future<void> _share(BuildContext context) async {
     final bytes = await _pdfBytes(context);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/${row.title}_${row.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], text: '${row.title} ${row.docNumber}'));
+    await ShareUtil.shareBytes(bytes, '${row.title}_${row.docNumber}.pdf',
+        text: '${row.title} ${row.docNumber}');
+    if (!context.mounted) return;
     final app = context.read<AppProvider>();
     if (row.invoice != null) {
       await app.markInvoiceShared(row.id);
@@ -110,11 +106,8 @@ class DocumentCard extends StatelessWidget {
 
   Future<void> _download(BuildContext context) async {
     final bytes = await _pdfBytes(context);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/${row.title}_${row.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    if (!context.mounted) return;
-    _snack(context, 'تم حفظ الملف: ${file.path}');
+    await ShareUtil.shareBytes(bytes, '${row.title}_${row.docNumber}.pdf',
+        text: '${row.title} ${row.docNumber}');
   }
 
   void _copyNumber(BuildContext context) {

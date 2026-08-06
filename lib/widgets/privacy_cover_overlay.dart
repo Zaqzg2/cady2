@@ -1,8 +1,8 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
+import 'stored_image.dart';
 
 /// يُغطّي محتوى الشاشة بشعار/اسم الشركة عند انتقال التطبيق للخلفية أو
 /// أثناء تبديل التطبيقات، حتى لا تظهر الأرقام المالية في صورة "التطبيقات
@@ -58,11 +58,11 @@ class _PrivacyCoverOverlayState extends State<PrivacyCoverOverlay>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (s.logoPath != null && File(s.logoPath!).existsSync())
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundImage: FileImage(File(s.logoPath!)),
-                        )
+                      if (s.logoPath != null)
+                        StoredAvatar(
+                            imageKey: s.logoPath,
+                            radius: 40,
+                            placeholderIcon: Icons.storefront)
                       else
                         Icon(Icons.storefront,
                             size: 64, color: Theme.of(context).colorScheme.primary),

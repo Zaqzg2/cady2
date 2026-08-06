@@ -1,11 +1,8 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/customer.dart';
@@ -16,6 +13,7 @@ import '../models/receipt.dart';
 import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
+import '../services/share_util.dart';
 import '../utils/formatters.dart';
 import 'invoice_screen.dart';
 import 'receipt_screen.dart';
@@ -83,25 +81,16 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
         content: Text(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة — تحقق من الإعدادات')));
   }
 
-  Future<File> _saveStatementFile() async {
-    final bytes = await _buildStatementPdf();
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/كشف_حساب_${_customer.name}.pdf');
-    await file.writeAsBytes(bytes);
-    return file;
-  }
-
   Future<void> _shareStatement() async {
-    final file = await _saveStatementFile();
-    await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], text: 'كشف حساب ${_customer.name}'));
+    final bytes = await _buildStatementPdf();
+    await ShareUtil.shareBytes(bytes, 'كشف_حساب_${_customer.name}.pdf',
+        text: 'كشف حساب ${_customer.name}');
   }
 
   Future<void> _downloadStatement() async {
-    final file = await _saveStatementFile();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تم حفظ الملف: ${file.path}')));
+    final bytes = await _buildStatementPdf();
+    await ShareUtil.shareBytes(bytes, 'كشف_حساب_${_customer.name}.pdf',
+        text: 'كشف حساب ${_customer.name}');
   }
 
   // ---------------- إجراءات الاتصال/واتساب/الموقع ----------------
@@ -275,21 +264,15 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   Future<void> _shareEntry(LedgerEntry e) async {
     final bytes = await _entryPdfBytes(e);
     if (bytes == null) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/${e.description}_${e.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    await SharePlus.instance
-        .share(ShareParams(files: [XFile(file.path)], text: '${e.description} ${e.docNumber}'));
+    await ShareUtil.shareBytes(bytes, '${e.description}_${e.docNumber}.pdf',
+        text: '${e.description} ${e.docNumber}');
   }
 
   Future<void> _downloadEntry(LedgerEntry e) async {
     final bytes = await _entryPdfBytes(e);
     if (bytes == null) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/${e.description}_${e.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    if (!mounted) return;
-    _snack('تم حفظ الملف: ${file.path}');
+    await ShareUtil.shareBytes(bytes, '${e.description}_${e.docNumber}.pdf',
+        text: '${e.description} ${e.docNumber}');
   }
 
   void _copyDocNumber(LedgerEntry e) {

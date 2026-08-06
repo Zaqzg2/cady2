@@ -1,10 +1,12 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:signature/signature.dart';
 
+import '../services/image_store.dart';
+
 /// منطقة توقيع بارزة باللمس (تُستخدم لتوقيع العميل في الفاتورة، وتوقيع
-/// المندوب في سند القبض). تحفظ الناتج كصورة PNG محليًا وتُرجع مسارها.
+/// المندوب في سند القبض). تحفظ الناتج داخل ImageStore (يعمل على الجوال
+/// والويب معًا) وتُرجع مفتاحه.
 class SignaturePadWidget extends StatefulWidget {
   final String label;
   final String? existingPath;
@@ -27,8 +29,10 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
   // ثابتة بدل لوحة رسم فاضية، حتى لا يُعتبر "فاضياً" ويُمسح بالخطأ عند
   // الحفظ دون رسم توقيع جديد. المستخدم يقدر يضغط "إعادة التوقيع" إذا
   // يريد تغييره فعليًا.
-  late bool _showingExistingImage;
-  String? _existingPath;
+  bool _showingExistingImage = false;
+  bool _loadingExisting = false;
+  String? _existingKey;
+  Uint8List? _existingBytes;
 
   @override
   void initState() {
@@ -38,9 +42,22 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
       penColor: Colors.black,
       exportBackgroundColor: Colors.white,
     );
-    _existingPath = widget.existingPath;
-    _showingExistingImage =
-        _existingPath != null && File(_existingPath!).existsSync();
+    _existingKey = widget.existingPath;
+    if (_existingKey != null) {
+      _showingExistingImage = true;
+      _loadExisting();
+    }
+  }
+
+  Future<void> _loadExisting() async {
+    setState(() => _loadingExisting = true);
+    final bytes = await ImageStore.instance.load(_existingKey);
+    if (!mounted) return;
+    setState(() {
+      _existingBytes = bytes;
+      _showingExistingImage = bytes != null;
+      _loadingExisting = false;
+    });
   }
 
   @override
@@ -53,17 +70,15 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
     if (_controller.isEmpty) {
       // لا نمسح توقيعًا محفوظًا مسبقًا لمجرد أن لوحة الرسم فاضية —
       // هذا يحصل فقط إذا لم يرسم المستخدم شيئًا جديدًا أصلاً.
-      widget.onSaved(_existingPath);
+      widget.onSaved(_existingKey);
       return;
     }
     final data = await _controller.toPngBytes();
     if (data == null) return;
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File(
-        '${dir.path}/sig_${DateTime.now().millisecondsSinceEpoch}.png');
-    await file.writeAsBytes(data);
-    _existingPath = file.path;
-    widget.onSaved(file.path);
+    final key = await ImageStore.instance.save(data, key: _existingKey);
+    _existingKey = key;
+    _existingBytes = data;
+    widget.onSaved(key);
   }
 
   @override
@@ -81,7 +96,8 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
               onPressed: () {
                 _controller.clear();
                 setState(() => _showingExistingImage = false);
-                _existingPath = null;
+                _existingKey = null;
+                _existingBytes = null;
                 widget.onSaved(null);
               },
               icon: const Icon(Icons.refresh),
@@ -97,33 +113,35 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
             border: Border.all(color: Colors.orange, width: 2.5),
             borderRadius: BorderRadius.circular(14),
           ),
-          child: _showingExistingImage
-              ? Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Image.file(File(_existingPath!), fit: BoxFit.contain),
-                    ),
-                    Positioned(
-                      bottom: 6,
-                      left: 6,
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.orange.shade50,
+          child: _loadingExisting
+              ? const Center(child: CircularProgressIndicator())
+              : (_showingExistingImage && _existingBytes != null)
+                  ? Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Image.memory(_existingBytes!, fit: BoxFit.contain),
                         ),
-                        onPressed: () =>
-                            setState(() => _showingExistingImage = false),
-                        child: const Text('إعادة التوقيع'),
-                      ),
+                        Positioned(
+                          bottom: 6,
+                          left: 6,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.orange.shade50,
+                            ),
+                            onPressed: () =>
+                                setState(() => _showingExistingImage = false),
+                            child: const Text('إعادة التوقيع'),
+                          ),
+                        ),
+                      ],
+                    )
+                  : Signature(
+                      controller: _controller,
+                      backgroundColor: Colors.white,
                     ),
-                  ],
-                )
-              : Signature(
-                  controller: _controller,
-                  backgroundColor: Colors.white,
-                ),
         ),
         const SizedBox(height: 6),
-        if (!_showingExistingImage)
+        if (!_showingExistingImage && !_loadingExisting)
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(

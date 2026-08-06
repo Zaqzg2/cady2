@@ -1,9 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'pdf_preview_screen.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -15,6 +12,7 @@ import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
 import '../services/feedback_service.dart';
+import '../services/share_util.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/quantity_selector.dart';
@@ -251,11 +249,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     if (inv == null) return;
     final app = context.read<AppProvider>();
     final bytes = await PdfService.instance.generateInvoicePdf(inv, app.settings);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/فاتورة_${inv.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], text: 'فاتورة ${inv.docNumber}'));
+    await ShareUtil.shareBytes(bytes, 'فاتورة_${inv.docNumber}.pdf',
+        text: 'فاتورة ${inv.docNumber}');
   }
 
   @override

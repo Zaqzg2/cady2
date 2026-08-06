@@ -57,8 +57,8 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
   }
 
   Future<void> _importBackup() async {
-    final path = await BackupService.instance.pickBackupFilePath();
-    if (path == null) return;
+    final content = await BackupService.instance.pickBackupContent();
+    if (content == null) return;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -74,7 +74,7 @@ class _SettingsDataScreenState extends State<SettingsDataScreen> {
     if (confirm != true) return;
     setState(() => _busy = true);
     try {
-      await BackupService.instance.importFromFile(path);
+      await BackupService.instance.importFromJson(content);
       if (mounted) {
         await context.read<AppProvider>().init();
         setState(() => _statsFuture = DataStatsService.collect());

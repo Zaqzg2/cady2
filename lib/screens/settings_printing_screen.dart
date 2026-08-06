@@ -1,6 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 import '../models/company_settings.dart';
 import '../providers/app_provider.dart';
@@ -22,7 +22,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
   double _bodyFontSize = 9;
   double _lineSpacing = 1.2;
   StatementFormat _statementFormat = StatementFormat.thermal80;
-  List<BluetoothInfo> _pairedDevices = [];
+  List<PrinterDevice> _pairedDevices = [];
   String? _selectedPrinterMac;
   bool _loadingDevices = false;
 
@@ -54,15 +54,15 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
   void _snack(String msg) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
-  Future<void> _connectPrinter(BluetoothInfo device) async {
-    final ok = await PrintService.instance.connect(device.macAdress);
+  Future<void> _connectPrinter(PrinterDevice device) async {
+    final ok = await PrintService.instance.connect(device.macAddress);
     if (ok) {
       final app = context.read<AppProvider>();
       final s = app.settings;
-      s.printerAddress = device.macAdress;
+      s.printerAddress = device.macAddress;
       s.printerName = device.name;
       await app.saveSettings(s);
-      setState(() => _selectedPrinterMac = device.macAdress);
+      setState(() => _selectedPrinterMac = device.macAddress);
       _snack('تم الاتصال بالطابعة ${device.name}');
     } else {
       _snack('تعذّر الاتصال بالطابعة');
@@ -102,83 +102,110 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Row(
-            children: [
-              const Text('الطابعة الحرارية 80مم',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: (connected ? Colors.green : Colors.red).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: connected ? Colors.green : Colors.red),
+          if (kIsWeb)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'الطباعة الحرارية عبر بلوتوث متاحة فقط على تطبيق الجوال. '
+                      'على المتصفح، يفتح زر "طباعة" حوار الطباعة الأصلي بالمتصفح '
+                      '(يمكنك الطباعة على أي طابعة متصلة بجهازك، أو الحفظ كـ PDF).',
+                      style: TextStyle(fontSize: 12.5, color: Colors.blue.shade900),
                     ),
-                    const SizedBox(width: 6),
-                    Text(connected ? 'متصلة' : 'غير متصلة',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: connected ? Colors.green.shade800 : Colors.red.shade800,
-                            fontWeight: FontWeight.w600)),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          if (connected) ...[
-            const SizedBox(height: 6),
-            Text('متصلة حاليًا بـ: ${app.settings.printerName ?? _selectedPrinterMac}',
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-          ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: _loadingDevices
-                      ? const SizedBox(
-                          width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.refresh),
-                  label: const Text('تحديث قائمة الأجهزة'),
-                  onPressed: _loadingDevices ? null : _loadPairedDevices,
-                ),
-              ),
-              if (connected) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.link_off, color: Colors.red),
-                    label: const Text('فصل الطابعة', style: TextStyle(color: Colors.red)),
-                    onPressed: _disconnectPrinter,
+            )
+          else ...[
+            Row(
+              children: [
+                const Text('الطابعة الحرارية 80مم',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (connected ? Colors.green : Colors.red).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: connected ? Colors.green : Colors.red),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(connected ? 'متصلة' : 'غير متصلة',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: connected ? Colors.green.shade800 : Colors.red.shade800,
+                              fontWeight: FontWeight.w600)),
+                    ],
                   ),
                 ),
               ],
+            ),
+            if (connected) ...[
+              const SizedBox(height: 6),
+              Text('متصلة حاليًا بـ: ${app.settings.printerName ?? _selectedPrinterMac}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
             ],
-          ),
-          const SizedBox(height: 8),
-          if (_pairedDevices.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('لا توجد أجهزة مقترنة — اقرن الطابعة أولًا من إعدادات بلوتوث الهاتف'),
-            )
-          else
-            ..._pairedDevices.map((d) => RadioListTile<String>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(d.name),
-                  subtitle: Text(d.macAdress),
-                  value: d.macAdress,
-                  groupValue: _selectedPrinterMac,
-                  onChanged: (_) => _connectPrinter(d),
-                )),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: _loadingDevices
+                        ? const SizedBox(
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.refresh),
+                    label: const Text('تحديث قائمة الأجهزة'),
+                    onPressed: _loadingDevices ? null : _loadPairedDevices,
+                  ),
+                ),
+                if (connected) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.link_off, color: Colors.red),
+                      label: const Text('فصل الطابعة', style: TextStyle(color: Colors.red)),
+                      onPressed: _disconnectPrinter,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_pairedDevices.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('لا توجد أجهزة مقترنة — اقرن الطابعة أولًا من إعدادات بلوتوث الهاتف'),
+              )
+            else
+              ..._pairedDevices.map((d) => RadioListTile<String>(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(d.name),
+                    subtitle: Text(d.macAddress),
+                    value: d.macAddress,
+                    groupValue: _selectedPrinterMac,
+                    onChanged: (_) => _connectPrinter(d),
+                  )),
+          ],
           const Divider(height: 32),
 
           const Text('معاينة حية', style: TextStyle(fontWeight: FontWeight.bold)),

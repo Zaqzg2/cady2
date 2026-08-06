@@ -1,11 +1,10 @@
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-
 import 'db_service.dart';
+import 'image_store.dart';
 import 'settings_service.dart';
 
-/// تنظيف صور التوقيع (sig_*.png) غير المرتبطة بأي فاتورة أو سند حالي ولا
-/// بالتوقيع الافتراضي المحفوظ للمندوب — لتحرير المساحة المستخدمة
+/// تنظيف صور محفوظة (توقيعات/شعار) غير المرتبطة بأي فاتورة أو سند حالي
+/// ولا بالتوقيع الافتراضي المحفوظ للمندوب أو شعار الشركة الحالي —
+/// لتحرير المساحة المستخدمة داخل Hive.
 class CleanupService {
   static Future<int> cleanUnusedSignatures() async {
     final invoices = await DbService.instance.getInvoices();
@@ -17,20 +16,15 @@ class CleanupService {
       ...receipts.map((r) => r.repSignaturePath).whereType<String>(),
       if (settings.defaultRepSignaturePath != null)
         settings.defaultRepSignaturePath!,
+      if (settings.logoPath != null) settings.logoPath!,
     };
 
+    final allKeys = await ImageStore.instance.allKeys();
     int deleted = 0;
-    final dir = await getApplicationDocumentsDirectory();
-    if (!await dir.exists()) return 0;
-    for (final entity in dir.listSync()) {
-      if (entity is File &&
-          entity.path.contains('/sig_') &&
-          entity.path.endsWith('.png') &&
-          !used.contains(entity.path)) {
-        try {
-          await entity.delete();
-          deleted++;
-        } catch (_) {}
+    for (final key in allKeys) {
+      if (!used.contains(key)) {
+        await ImageStore.instance.delete(key);
+        deleted++;
       }
     }
     return deleted;

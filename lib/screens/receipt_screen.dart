@@ -1,8 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:file_picker/file_picker.dart';
 import 'pdf_preview_screen.dart';
@@ -13,6 +10,7 @@ import '../providers/app_provider.dart';
 import '../services/pdf_service.dart';
 import '../services/print_service.dart';
 import '../services/feedback_service.dart';
+import '../services/share_util.dart';
 import '../utils/formatters.dart';
 import '../widgets/big_card.dart';
 import '../widgets/signature_pad_widget.dart';
@@ -212,11 +210,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (r == null) return;
     final app = context.read<AppProvider>();
     final bytes = await PdfService.instance.generateReceiptPdf(r, app.settings);
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/سند_قبض_${r.docNumber}.pdf');
-    await file.writeAsBytes(bytes);
-    await SharePlus.instance.share(
-        ShareParams(files: [XFile(file.path)], text: 'سند قبض ${r.docNumber}'));
+    await ShareUtil.shareBytes(bytes, 'سند_قبض_${r.docNumber}.pdf',
+        text: 'سند قبض ${r.docNumber}');
   }
 
   @override

@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
+import '../services/image_store.dart';
 import '../widgets/signature_pad_widget.dart';
+import '../widgets/stored_image.dart';
 
 /// بيانات الشركة والمندوب: الشعار، اسم/هاتف/عنوان الشركة، اسم/هاتف
 /// المندوب، توقيعه الافتراضي المحفوظ، ونص التذييل الثابت أسفل كل فاتورة
@@ -42,11 +43,13 @@ class _SettingsCompanyScreenState extends State<SettingsCompanyScreen> {
 
   Future<void> _pickLogo() async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file == null) return;
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
     final app = context.read<AppProvider>();
     final s = app.settings;
-    s.logoPath = file.path;
+    final key = await ImageStore.instance.save(bytes, key: s.logoPath);
+    s.logoPath = key;
     await app.saveSettings(s);
     setState(() {});
   }
@@ -54,6 +57,7 @@ class _SettingsCompanyScreenState extends State<SettingsCompanyScreen> {
   Future<void> _removeLogo() async {
     final app = context.read<AppProvider>();
     final s = app.settings;
+    await ImageStore.instance.delete(s.logoPath);
     s.logoPath = null;
     await app.saveSettings(s);
     setState(() {});
@@ -91,13 +95,7 @@ class _SettingsCompanyScreenState extends State<SettingsCompanyScreen> {
           const SizedBox(height: 8),
           Row(
             children: [
-              CircleAvatar(
-                radius: 34,
-                backgroundColor: Colors.grey.shade200,
-                backgroundImage:
-                    s.logoPath != null ? FileImage(File(s.logoPath!)) : null,
-                child: s.logoPath == null ? const Icon(Icons.image, size: 30) : null,
-              ),
+              StoredAvatar(imageKey: s.logoPath, radius: 34),
               const SizedBox(width: 14),
               Expanded(
                 child: Wrap(

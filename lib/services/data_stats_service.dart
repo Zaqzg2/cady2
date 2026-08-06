@@ -1,5 +1,5 @@
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
+import 'dart:convert';
+import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 
 import 'db_service.dart';
 
@@ -28,25 +28,41 @@ class DataStats {
 }
 
 class DataStatsService {
+  static const _boxNames = [
+    'customers',
+    'products',
+    'invoices',
+    'receipts',
+    'images',
+    'auto_backups',
+  ];
+
+  /// تقدير حجم البيانات المخزّنة فعليًا (بايتات محتوى JSON/Base64 داخل
+  /// Hive) — يعمل بنفس الطريقة على الجوال والويب معًا، بخلاف حساب حجم
+  /// ملفات فعلية على القرص (غير متاح على الويب أصلاً)
+  static Future<int> _estimateStoredBytes() async {
+    int total = 0;
+    for (final name in _boxNames) {
+      try {
+        final box = await Hive.openBox(name);
+        for (final v in box.values) {
+          try {
+            total += utf8.encode(jsonEncode(v)).length;
+          } catch (_) {
+            total += v.toString().length;
+          }
+        }
+      } catch (_) {}
+    }
+    return total;
+  }
+
   static Future<DataStats> collect() async {
     final customers = await DbService.instance.getCustomers();
     final products = await DbService.instance.getProducts();
     final invoices = await DbService.instance.getInvoices();
     final receipts = await DbService.instance.getReceipts();
-
-    int totalBytes = 0;
-    try {
-      final dir = await getApplicationDocumentsDirectory();
-      if (await dir.exists()) {
-        await for (final entity in dir.list(recursive: true, followLinks: false)) {
-          if (entity is File) {
-            try {
-              totalBytes += await entity.length();
-            } catch (_) {}
-          }
-        }
-      }
-    } catch (_) {}
+    final totalBytes = await _estimateStoredBytes();
 
     return DataStats(
       customers: customers.length,
