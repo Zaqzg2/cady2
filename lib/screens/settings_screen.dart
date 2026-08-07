@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/app_provider.dart';
 import '../models/company_settings.dart';
+import '../models/user_account.dart';
 import '../services/auth_service.dart';
 import '../widgets/settings_tile.dart';
 import 'settings_company_screen.dart';
@@ -41,6 +42,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _confirmLogout(BuildContext context, AppProvider app) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('تسجيل الخروج'),
+        content: const Text('هل تريد تسجيل الخروج من هذا الحساب؟'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('تسجيل الخروج')),
+        ],
+      ),
+    );
+    if (confirmed == true) await app.logout();
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
@@ -75,6 +95,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           SettingsSection(
             children: [
+              SettingsTile(
+                icon: Icons.account_circle_outlined,
+                iconColor: Colors.brown,
+                title: app.currentUser?.displayName ?? 'الحساب',
+                subtitle: app.currentUser?.role == UserRole.manager
+                    ? 'مدير • تسجيل الخروج'
+                    : 'مندوب • تسجيل الخروج',
+                onTap: () => _confirmLogout(context, app),
+              ),
               SettingsTile(
                 icon: Icons.store_outlined,
                 iconColor: Colors.teal,

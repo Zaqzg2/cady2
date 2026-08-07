@@ -9,10 +9,12 @@ import '../models/receipt.dart';
 import '../models/company_settings.dart';
 import '../models/ledger_entry.dart';
 import '../models/customer_stats.dart';
+import '../models/user_account.dart';
 import '../services/db_service.dart';
 import '../services/numbering_service.dart';
 import '../services/settings_service.dart';
 import '../services/auto_backup_service.dart';
+import '../services/account_service.dart';
 
 /// المزوّد المركزي لحالة التطبيق: عملاء، منتجات، إعدادات، وعمليات
 /// حفظ الفواتير/السندات مع حساب المديونية والترقيم التلقائي
@@ -24,6 +26,8 @@ class AppProvider extends ChangeNotifier {
   CompanySettings settings = CompanySettings();
   bool loading = true;
   String? initError;
+  UserAccount? currentUser;
+  bool usersExist = false;
 
   Future<void> init() async {
     loading = true;
@@ -33,6 +37,8 @@ class AppProvider extends ChangeNotifier {
       customers = await DbService.instance.getCustomers();
       products = await DbService.instance.getProducts();
       settings = await SettingsService.instance.load();
+      usersExist = await AccountService.instance.hasAnyUsers();
+      currentUser = await AccountService.instance.getCurrentUser();
       // نسخ احتياطي تلقائي (يومي/أسبوعي) إن كان مفعّلاً وحان وقته — فشله
       // لا يجب أن يمنع فتح التطبيق، لذا يُعالَج بصمت داخليًا
       unawaited(AutoBackupService.runIfDue(settings));
@@ -44,6 +50,80 @@ class AppProvider extends ChangeNotifier {
       initError = e.toString();
     }
     loading = false;
+    notifyListeners();
+  }
+
+  // ---------------- حسابات المستخدمين (مدير/مندوب) ----------------
+  /// ينشئ أول حساب على الجهاز — يكون مديرًا دائمًا، ويبدأ جلسته فورًا
+  Future<UserAccount> createFirstManager({
+    required String username,
+    required String rawPassword,
+    required String displayName,
+  }) async {
+    final manager = await AccountService.instance.createUser(
+      username: username,
+      rawPassword: rawPassword,
+      displayName: displayName,
+      role: UserRole.manager,
+    );
+    await AccountService.instance.setSession(manager.id);
+    usersExist = true;
+    currentUser = manager;
+    notifyListeners();
+    return manager;
+  }
+
+  Future<bool> login(String username, String password) async {
+    final user = await AccountService.instance.login(username, password);
+    if (user == null) return false;
+    currentUser = user;
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> logout() async {
+    await AccountService.instance.logout();
+    currentUser = null;
+    notifyListeners();
+  }
+
+  Future<List<UserAccount>> getAllUsers() => AccountService.instance.getUsers();
+
+  Future<bool> isUsernameTaken(String username, {String? excludingId}) =>
+      AccountService.instance.isUsernameTaken(username, excludingId: excludingId);
+
+  Future<UserAccount> addUser({
+    required String username,
+    required String rawPassword,
+    required String displayName,
+    required UserRole role,
+    String repNumber = '',
+  }) async {
+    final user = await AccountService.instance.createUser(
+      username: username,
+      rawPassword: rawPassword,
+      displayName: displayName,
+      role: role,
+      repNumber: repNumber,
+    );
+    notifyListeners();
+    return user;
+  }
+
+  Future<void> updateUserAccount(UserAccount user) async {
+    await AccountService.instance.updateUser(user);
+    if (currentUser?.id == user.id) currentUser = user;
+    notifyListeners();
+  }
+
+  Future<void> setUserPassword(UserAccount user, String rawPassword) async {
+    await AccountService.instance.setPassword(user, rawPassword);
+    notifyListeners();
+  }
+
+  Future<void> toggleUserActive(UserAccount user) async {
+    user.isActive = !user.isActive;
+    await AccountService.instance.updateUser(user);
     notifyListeners();
   }
 

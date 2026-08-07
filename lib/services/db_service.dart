@@ -4,6 +4,7 @@ import '../models/customer.dart';
 import '../models/product.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
+import '../models/user_account.dart';
 
 /// طبقة الوصول لقاعدة بيانات التطبيق — Hive بالكامل (nosql محلي سريع
 /// يعمل بنفس الطريقة على الجوال والويب عبر IndexedDB). كل سجل يُخزَّن
@@ -18,12 +19,14 @@ class DbService {
   static const _productsBoxName = 'products';
   static const _invoicesBoxName = 'invoices';
   static const _receiptsBoxName = 'receipts';
+  static const _usersBoxName = 'users';
 
   bool _ready = false;
   late Box _customersBox;
   late Box _productsBox;
   late Box _invoicesBox;
   late Box _receiptsBox;
+  late Box _usersBox;
 
   Future<void> _ensureReady() async {
     if (_ready) return;
@@ -32,6 +35,7 @@ class DbService {
     _productsBox = await Hive.openBox(_productsBoxName);
     _invoicesBox = await Hive.openBox(_invoicesBoxName);
     _receiptsBox = await Hive.openBox(_receiptsBoxName);
+    _usersBox = await Hive.openBox(_usersBoxName);
     _ready = true;
   }
 
@@ -138,6 +142,26 @@ class DbService {
     final v = _receiptsBox.get(id);
     if (v == null) return null;
     return Receipt.fromMap(_asStringMap(v));
+  }
+
+  // ---------------- المستخدمون (حسابات مدير/مندوب) ----------------
+  Future<void> upsertUser(UserAccount u) async {
+    await _ensureReady();
+    await _usersBox.put(u.id, u.toMap());
+  }
+
+  Future<void> deleteUser(String id) async {
+    await _ensureReady();
+    await _usersBox.delete(id);
+  }
+
+  Future<List<UserAccount>> getUsers() async {
+    await _ensureReady();
+    final list = _usersBox.values
+        .map((v) => UserAccount.fromMap(_asStringMap(v)))
+        .toList();
+    list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return list;
   }
 
   // ---------------- حساب رصيد العميل ----------------

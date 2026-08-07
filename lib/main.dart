@@ -12,7 +12,11 @@ import 'screens/customers_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/lock_screen.dart';
+import 'screens/setup_manager_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/manager/manager_root_nav.dart';
 import 'services/auth_service.dart';
+import 'models/user_account.dart';
 import 'widgets/privacy_cover_overlay.dart';
 
 /// يحسب أقصر مدة خمول مؤدّية لقفل التطبيق تلقائيًا، بين خيار "القفل
@@ -152,7 +156,11 @@ class CadySalesApp extends StatelessWidget {
                           ),
                         ),
                       )
-                    : const AppGate(),
+                    : !app.usersExist
+                        ? const SetupManagerScreen()
+                        : app.currentUser == null
+                            ? const LoginScreen()
+                            : const AppGate(),
           );
         },
       ),
@@ -236,7 +244,10 @@ class _AppGateState extends State<AppGate> with WidgetsBindingObserver {
     if (_needsUnlock == true) {
       return LockScreen(onUnlocked: () => setState(() => _needsUnlock = false));
     }
-    return const PrivacyCoverOverlay(child: RootNav());
+    final role = context.watch<AppProvider>().currentUser?.role;
+    return PrivacyCoverOverlay(
+      child: role == UserRole.manager ? const ManagerRootNav() : const RootNav(),
+    );
   }
 }
 
