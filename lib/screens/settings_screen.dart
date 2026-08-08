@@ -11,6 +11,7 @@ import 'settings_printing_screen.dart';
 import 'settings_appearance_screen.dart';
 import 'settings_privacy_screen.dart';
 import 'settings_data_screen.dart';
+import 'sync_screen.dart';
 
 /// الشاشة الرئيسية للإعدادات — قائمة أقسام بنمط iOS/Android الرسمي:
 /// كل قسم سطر واحد بأيقونة + عنوان + سطر فرعي يلخّص الحالة + سهم يفتح
@@ -131,6 +132,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'الخصوصية والأمان',
                 subtitle: privacySubtitle,
                 onTap: () => _open(const SettingsPrivacyScreen()),
+              ),
+              SettingsTile(
+                icon: Icons.sync_outlined,
+                iconColor: Colors.orange,
+                title: 'المزامنة',
+                subtitle: app.currentUser?.lastSyncAt != null
+                    ? 'آخر مزامنة مسجّلة'
+                    : 'لم تتم أي مزامنة بعد',
+                onTap: () => _open(const SyncScreen()),
               ),
               SettingsTile(
                 icon: Icons.backup_outlined,

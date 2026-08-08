@@ -1,3 +1,5 @@
+import 'sync_status.dart';
+
 class Customer {
   final String id;
   String name;
@@ -8,6 +10,8 @@ class Customer {
   bool isActive; // حالة العميل: نشط/متوقف
   double creditLimit; // الحد الائتماني المسموح به (0 = بلا حد)
   String notes; // ملاحظات داخلية عن العميل
+  SyncStatus syncStatus;
+  DateTime updatedAt;
 
   Customer({
     required this.id,
@@ -19,7 +23,9 @@ class Customer {
     this.isActive = true,
     this.creditLimit = 0,
     this.notes = '',
-  });
+    this.syncStatus = SyncStatus.pending,
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -31,6 +37,8 @@ class Customer {
         'isActive': isActive ? 1 : 0,
         'creditLimit': creditLimit,
         'notes': notes,
+        'syncStatus': syncStatus.name,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Customer.fromMap(Map<String, dynamic> m) => Customer(
@@ -43,5 +51,15 @@ class Customer {
         isActive: ((m['isActive'] as num?) ?? 1) != 0,
         creditLimit: (m['creditLimit'] as num?)?.toDouble() ?? 0,
         notes: m['notes'] as String? ?? '',
+        // migration آمن: سجل قديم بلا هذا الحقل يُعتبر "متزامن" افتراضيًا
+        // حتى لا يظهر فجأة كمعلّق بعد تحديث التطبيق
+        syncStatus: m['syncStatus'] != null
+            ? SyncStatus.values.firstWhere((s) => s.name == m['syncStatus'],
+                orElse: () => SyncStatus.synced)
+            : SyncStatus.synced,
+        updatedAt: m['updatedAt'] != null
+            ? DateTime.parse(m['updatedAt'] as String)
+            : DateTime.now(),
       );
 }
+

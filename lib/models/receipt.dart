@@ -1,3 +1,5 @@
+import 'sync_status.dart';
+
 enum ReceiptMethod { cash, transfer } // نقدًا / تحويل
 
 class Receipt {
@@ -15,6 +17,8 @@ class Receipt {
   bool isShared;
   bool isPinned;
   DateTime createdAt;
+  SyncStatus syncStatus;
+  DateTime updatedAt;
 
   Receipt({
     required this.id,
@@ -31,7 +35,10 @@ class Receipt {
     this.isShared = false,
     this.isPinned = false,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.syncStatus = SyncStatus.pending,
+    DateTime? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -48,6 +55,8 @@ class Receipt {
         'isShared': isShared,
         'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
+        'syncStatus': syncStatus.name,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Receipt.fromMap(Map<String, dynamic> m) => Receipt(
@@ -65,5 +74,13 @@ class Receipt {
         isShared: (m['isShared'] as bool?) ?? false,
         isPinned: (m['isPinned'] as bool?) ?? false,
         createdAt: DateTime.parse(m['createdAt'] as String),
+        syncStatus: m['syncStatus'] != null
+            ? SyncStatus.values.firstWhere((s) => s.name == m['syncStatus'],
+                orElse: () => SyncStatus.synced)
+            : SyncStatus.synced,
+        updatedAt: m['updatedAt'] != null
+            ? DateTime.parse(m['updatedAt'] as String)
+            : DateTime.now(),
       );
 }
+

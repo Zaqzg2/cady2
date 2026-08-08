@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'manager_dashboard_screen.dart';
 import 'manager_users_screen.dart';
-import 'manager_sync_placeholder_screen.dart';
+import 'manager_sync_hub_screen.dart';
 
 /// شريط التنقل السفلي لوضع المدير: لوحة التحكم / المندوبون / المزامنة
 class ManagerRootNav extends StatefulWidget {
@@ -18,7 +18,7 @@ class _ManagerRootNavState extends State<ManagerRootNav> {
   final _pages = const [
     ManagerDashboardScreen(),
     ManagerUsersScreen(),
-    ManagerSyncPlaceholderScreen(),
+    ManagerSyncHubScreen(),
   ];
 
   @override

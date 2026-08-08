@@ -1,4 +1,5 @@
 import 'invoice_item.dart';
+import 'sync_status.dart';
 
 enum InvoiceKind { sale, saleReturn } // فاتورة بيع / فاتورة مرتجع
 enum PaymentMode { cash, credit } // نقد / آجل
@@ -21,6 +22,8 @@ class Invoice {
   bool isShared; // هل شُوركت (واتساب/مشاركة) من قبل
   bool isPinned; // تثبيت الفاتورة أعلى سجل المستندات
   DateTime createdAt;
+  SyncStatus syncStatus;
+  DateTime updatedAt;
 
   Invoice({
     required this.id,
@@ -40,7 +43,10 @@ class Invoice {
     this.isShared = false,
     this.isPinned = false,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+    this.syncStatus = SyncStatus.pending,
+    DateTime? updatedAt,
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   double get subTotal => items.fold(0.0, (sum, it) => sum + it.total);
 
@@ -75,6 +81,8 @@ class Invoice {
         'isShared': isShared,
         'isPinned': isPinned,
         'createdAt': createdAt.toIso8601String(),
+        'syncStatus': syncStatus.name,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Invoice.fromMap(Map<String, dynamic> m) => Invoice(
@@ -98,5 +106,13 @@ class Invoice {
         isShared: (m['isShared'] as bool?) ?? false,
         isPinned: (m['isPinned'] as bool?) ?? false,
         createdAt: DateTime.parse(m['createdAt'] as String),
+        syncStatus: m['syncStatus'] != null
+            ? SyncStatus.values.firstWhere((s) => s.name == m['syncStatus'],
+                orElse: () => SyncStatus.synced)
+            : SyncStatus.synced,
+        updatedAt: m['updatedAt'] != null
+            ? DateTime.parse(m['updatedAt'] as String)
+            : DateTime.now(),
       );
 }
+

@@ -5,6 +5,8 @@ import '../models/product.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
 import '../models/user_account.dart';
+import '../models/sync_log_entry.dart';
+import '../models/export_log_entry.dart';
 
 /// طبقة الوصول لقاعدة بيانات التطبيق — Hive بالكامل (nosql محلي سريع
 /// يعمل بنفس الطريقة على الجوال والويب عبر IndexedDB). كل سجل يُخزَّن
@@ -15,11 +17,16 @@ class DbService {
   DbService._();
   static final DbService instance = DbService._();
 
+  /// إصدار مخطط قاعدة البيانات — يُعرض في شاشة المزامنة عند المندوب
+  static const int schemaVersion = 1;
+
   static const _customersBoxName = 'customers';
   static const _productsBoxName = 'products';
   static const _invoicesBoxName = 'invoices';
   static const _receiptsBoxName = 'receipts';
   static const _usersBoxName = 'users';
+  static const _syncLogBoxName = 'sync_log';
+  static const _exportLogBoxName = 'export_log';
 
   bool _ready = false;
   late Box _customersBox;
@@ -27,6 +34,8 @@ class DbService {
   late Box _invoicesBox;
   late Box _receiptsBox;
   late Box _usersBox;
+  late Box _syncLogBox;
+  late Box _exportLogBox;
 
   Future<void> _ensureReady() async {
     if (_ready) return;
@@ -36,6 +45,8 @@ class DbService {
     _invoicesBox = await Hive.openBox(_invoicesBoxName);
     _receiptsBox = await Hive.openBox(_receiptsBoxName);
     _usersBox = await Hive.openBox(_usersBoxName);
+    _syncLogBox = await Hive.openBox(_syncLogBoxName);
+    _exportLogBox = await Hive.openBox(_exportLogBoxName);
     _ready = true;
   }
 
@@ -161,6 +172,36 @@ class DbService {
         .map((v) => UserAccount.fromMap(_asStringMap(v)))
         .toList();
     list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return list;
+  }
+
+  // ---------------- سجل المزامنة (جانب المدير) ----------------
+  Future<void> addSyncLogEntry(SyncLogEntry e) async {
+    await _ensureReady();
+    await _syncLogBox.put(e.id, e.toMap());
+  }
+
+  Future<List<SyncLogEntry>> getSyncLog() async {
+    await _ensureReady();
+    final list = _syncLogBox.values
+        .map((v) => SyncLogEntry.fromMap(_asStringMap(v)))
+        .toList();
+    list.sort((a, b) => b.importedAt.compareTo(a.importedAt));
+    return list;
+  }
+
+  // ---------------- سجل التصدير (جانب المدير) ----------------
+  Future<void> addExportLogEntry(ExportLogEntry e) async {
+    await _ensureReady();
+    await _exportLogBox.put(e.id, e.toMap());
+  }
+
+  Future<List<ExportLogEntry>> getExportLog() async {
+    await _ensureReady();
+    final list = _exportLogBox.values
+        .map((v) => ExportLogEntry.fromMap(_asStringMap(v)))
+        .toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return list;
   }
 

@@ -10,11 +10,13 @@ import '../models/company_settings.dart';
 import '../models/ledger_entry.dart';
 import '../models/customer_stats.dart';
 import '../models/user_account.dart';
+import '../models/sync_status.dart';
 import '../services/db_service.dart';
 import '../services/numbering_service.dart';
 import '../services/settings_service.dart';
 import '../services/auto_backup_service.dart';
 import '../services/account_service.dart';
+import '../services/sync_service.dart';
 
 /// المزوّد المركزي لحالة التطبيق: عملاء، منتجات، إعدادات، وعمليات
 /// حفظ الفواتير/السندات مع حساب المديونية والترقيم التلقائي
@@ -127,8 +129,59 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ---------------- مزامنة (جانب المندوب) ----------------
+  Future<PendingSummary> getPendingSyncSummary() =>
+      SyncService.instance.getPendingSummary();
+
+  Future<SyncExportResult> exportPendingData() async {
+    final rep = currentUser;
+    if (rep == null) throw StateError('لا يوجد مستخدم مسجّل الدخول');
+    final result = await SyncService.instance.exportAndShare(rep);
+    rep.lastSyncAt = DateTime.now();
+    await AccountService.instance.updateUser(rep);
+    notifyListeners();
+    return result;
+  }
+
+  Future<({String json, String fileName, DateTime at})?> getLastExport() =>
+      SyncService.instance.getLastExport();
+
+  Future<bool> reExportLastSync() => SyncService.instance.reExportLast();
+
+  Future<String?> pickSyncAckFile() => SyncService.instance.pickAckFile();
+
+  /// يطبّق ملفًا واردًا من المدير (تأكيد مزامنة أو حزمة تحديث)، ثم يعيد
+  /// تحميل العملاء/المنتجات (والإعدادات إن تغيّرت) من القرص حتى لا تبقى
+  /// النسخة المحمَّلة في الذاكرة قديمة بعد كتابة SyncService مباشرة لها
+  Future<IncomingSyncResult> importIncomingSyncFile(String jsonContent) async {
+    final result = await SyncService.instance.importIncomingFile(jsonContent);
+    customers = await DbService.instance.getCustomers();
+    products = await DbService.instance.getProducts();
+    if (result.settingsUpdated) {
+      settings = await SettingsService.instance.load();
+    }
+    notifyListeners();
+    return result;
+  }
+
+  Future<void> refreshCustomersAndProducts() async {
+    customers = await DbService.instance.getCustomers();
+    products = await DbService.instance.getProducts();
+    notifyListeners();
+  }
+
+  Future<void> updateCurrentDeviceName(String name) async {
+    final user = currentUser;
+    if (user == null) return;
+    user.deviceName = name.trim();
+    await AccountService.instance.updateUser(user);
+    notifyListeners();
+  }
+
   // ---------------- عملاء ----------------
   Future<void> saveCustomer(Customer c) async {
+    c.syncStatus = SyncStatus.pending;
+    c.updatedAt = DateTime.now();
     await DbService.instance.upsertCustomer(c);
     customers = await DbService.instance.getCustomers();
     notifyListeners();
@@ -200,6 +253,8 @@ class AppProvider extends ChangeNotifier {
 
   // ---------------- منتجات ----------------
   Future<void> saveProduct(Product p) async {
+    p.syncStatus = SyncStatus.pending;
+    p.updatedAt = DateTime.now();
     await DbService.instance.upsertProduct(p);
     products = await DbService.instance.getProducts();
     notifyListeners();
@@ -260,6 +315,8 @@ class AppProvider extends ChangeNotifier {
     final baseBalance = await getCustomerBalanceExcluding(inv.customerId,
         excludeInvoiceId: inv.id);
     inv.balanceAfter = baseBalance + inv.effect;
+    inv.syncStatus = SyncStatus.pending;
+    inv.updatedAt = DateTime.now();
     await DbService.instance.upsertInvoice(inv);
     await NumberingService.instance
         .commitUsedNumber(inv.kind == InvoiceKind.sale ? 'sale' : 'return',
@@ -343,6 +400,8 @@ class AppProvider extends ChangeNotifier {
     final baseBalance =
         await getCustomerBalanceExcluding(r.customerId, excludeReceiptId: r.id);
     r.balanceAfter = baseBalance - r.amount;
+    r.syncStatus = SyncStatus.pending;
+    r.updatedAt = DateTime.now();
     await DbService.instance.upsertReceipt(r);
     await NumberingService.instance.commitUsedNumber('receipt', r.docNumber);
     notifyListeners();
