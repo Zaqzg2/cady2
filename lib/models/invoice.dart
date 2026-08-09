@@ -17,6 +17,7 @@ class Invoice {
   double discountAmount;
   String notes;
   String? signaturePath; // مسار صورة توقيع العميل (PNG)
+  String repName; // اسم المندوب الذي أنشأ الفاتورة (يُلتقط وقت الإنشاء فقط)
   double balanceAfter; // رصيد مديونية العميل بعد هذه الفاتورة
   bool isPrinted; // هل طُبعت هذه الفاتورة من قبل
   bool isShared; // هل شُوركت (واتساب/مشاركة) من قبل
@@ -38,6 +39,7 @@ class Invoice {
     this.discountAmount = 0,
     this.notes = '',
     this.signaturePath,
+    this.repName = '',
     this.balanceAfter = 0,
     this.isPrinted = false,
     this.isShared = false,
@@ -76,6 +78,7 @@ class Invoice {
         'discountAmount': discountAmount,
         'notes': notes,
         'signaturePath': signaturePath,
+        'repName': repName,
         'balanceAfter': balanceAfter,
         'isPrinted': isPrinted,
         'isShared': isShared,
@@ -101,6 +104,7 @@ class Invoice {
         discountAmount: (m['discountAmount'] as num?)?.toDouble() ?? 0,
         notes: m['notes'] as String? ?? '',
         signaturePath: m['signaturePath'] as String?,
+        repName: m['repName'] as String? ?? '',
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
         isPrinted: (m['isPrinted'] as bool?) ?? false,
         isShared: (m['isShared'] as bool?) ?? false,

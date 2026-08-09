@@ -11,6 +11,7 @@ class Receipt {
   String customerId;
   String customerName;
   String? repSignaturePath; // توقيع المندوب
+  String repName; // اسم المندوب الذي أنشأ السند (يُلتقط وقت الإنشاء فقط)
   String notes;
   double balanceAfter;
   bool isPrinted;
@@ -29,6 +30,7 @@ class Receipt {
     required this.customerId,
     required this.customerName,
     this.repSignaturePath,
+    this.repName = '',
     this.notes = '',
     this.balanceAfter = 0,
     this.isPrinted = false,
@@ -49,6 +51,7 @@ class Receipt {
         'customerId': customerId,
         'customerName': customerName,
         'repSignaturePath': repSignaturePath,
+        'repName': repName,
         'notes': notes,
         'balanceAfter': balanceAfter,
         'isPrinted': isPrinted,
@@ -68,6 +71,7 @@ class Receipt {
         customerId: m['customerId'] as String,
         customerName: m['customerName'] as String,
         repSignaturePath: m['repSignaturePath'] as String?,
+        repName: m['repName'] as String? ?? '',
         notes: m['notes'] as String? ?? '',
         balanceAfter: (m['balanceAfter'] as num?)?.toDouble() ?? 0,
         isPrinted: (m['isPrinted'] as bool?) ?? false,

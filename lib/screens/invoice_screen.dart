@@ -50,6 +50,10 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
   final _discountAmountCtrl = TextEditingController(text: '0');
   final _notesCtrl = TextEditingController();
   String? _signaturePath;
+  // اسم المندوب يُلتقط مرة واحدة فقط عند إنشاء الفاتورة (أو يُحافَظ عليه
+  // كما هو عند تعديل فاتورة قديمة) — لا يتغيّر لاحقًا حتى لو عدّلها مستخدم
+  // آخر، لأنه يمثّل مَن أجرى عملية البيع فعليًا.
+  String _repName = '';
   double _previewBalance = 0;
   bool _saving = false;
 
@@ -72,11 +76,14 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       _discountAmountCtrl.text = e.discountAmount.toString();
       _notesCtrl.text = e.notes;
       _signaturePath = e.signaturePath;
+      _repName = e.repName;
       _customer = app.customers.firstWhere((c) => c.id == e.customerId,
           orElse: () => Customer(id: e.customerId, name: e.customerName));
     } else {
       _id = _uuid.v4();
       _date = DateTime.now();
+      final currentName = app.currentUser?.displayName.trim() ?? '';
+      _repName = currentName.isNotEmpty ? currentName : app.settings.repName;
       app.peekNextInvoiceNumber(widget.kind).then((n) {
         if (mounted) setState(() => _docNumberCtrl.text = n);
       });
@@ -155,7 +162,17 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
       discountAmount: double.tryParse(_discountAmountCtrl.text) ?? 0,
       notes: _notesCtrl.text.trim(),
       signaturePath: _signaturePath,
+      repName: _repName,
     );
+  }
+
+  @override
+  void dispose() {
+    _docNumberCtrl.dispose();
+    _discountPercentCtrl.dispose();
+    _discountAmountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
   }
 
   bool _validate() {

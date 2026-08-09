@@ -36,6 +36,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
   ReceiptMethod _method = ReceiptMethod.cash;
   Customer? _customer;
   String? _repSignaturePath;
+  // يُلتقط مرة واحدة فقط عند الإنشاء، ويُحافَظ عليه كما هو عند التعديل
+  String _repName = '';
   double _previewBalance = 0;
   bool _saving = false;
 
@@ -52,6 +54,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       _method = e.method;
       _notesCtrl.text = e.notes;
       _repSignaturePath = e.repSignaturePath;
+      _repName = e.repName;
       _customer = app.customers.firstWhere((c) => c.id == e.customerId,
           orElse: () => Customer(id: e.customerId, name: e.customerName));
     } else {
@@ -59,6 +62,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       _date = DateTime.now();
       // توقيع افتراضي محفوظ للمندوب من الإعدادات، بدل توقيعه يدويًا بكل سند
       _repSignaturePath = app.settings.defaultRepSignaturePath;
+      final currentName = app.currentUser?.displayName.trim() ?? '';
+      _repName = currentName.isNotEmpty ? currentName : app.settings.repName;
       app.peekNextReceiptNumber().then((n) {
         if (mounted) setState(() => _docNumberCtrl.text = n);
       });
@@ -140,8 +145,17 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
       customerId: _customer!.id,
       customerName: _customer!.name,
       repSignaturePath: _repSignaturePath,
+      repName: _repName,
       notes: _notesCtrl.text.trim(),
     );
+  }
+
+  @override
+  void dispose() {
+    _docNumberCtrl.dispose();
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
   }
 
   void _snack(String msg) =>

@@ -127,6 +127,10 @@ class DocumentCard extends StatelessWidget {
 
   Future<void> _duplicate(BuildContext context) async {
     final app = context.read<AppProvider>();
+    // نسخة جديدة تُنشأ الآن فعليًا، فتُسجَّل باسم المندوب الحالي (وليس اسم
+    // مندوب المستند الأصلي الذي رُبما لم يعد هو من يعمل على الجهاز الآن).
+    final currentName = app.currentUser?.displayName.trim() ?? '';
+    final repNameNow = currentName.isNotEmpty ? currentName : app.settings.repName;
     if (row.invoice != null) {
       final inv = row.invoice!;
       final newNumber = await app.peekNextInvoiceNumber(inv.kind);
@@ -142,6 +146,7 @@ class DocumentCard extends StatelessWidget {
         discountPercent: inv.discountPercent,
         discountAmount: inv.discountAmount,
         notes: inv.notes,
+        repName: repNameNow,
       );
       if (!context.mounted) return;
       await Navigator.push(context,
@@ -158,6 +163,7 @@ class DocumentCard extends StatelessWidget {
         customerId: r.customerId,
         customerName: r.customerName,
         notes: r.notes,
+        repName: repNameNow,
       );
       if (!context.mounted) return;
       await Navigator.push(
@@ -294,7 +300,7 @@ class DocumentCard extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _openDetails(context),
+        onTap: () => _preview(context),
         onLongPress: () => _showLongPressMenu(context),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -373,7 +379,7 @@ class DocumentCard extends StatelessWidget {
                       Row(
                         children: [
                           TextButton.icon(
-                            onPressed: () => _openDetails(context),
+                            onPressed: () => _preview(context),
                             icon: const Icon(Icons.remove_red_eye_outlined, size: 16),
                             label: const Text('تفاصيل', style: TextStyle(fontSize: 12)),
                             style: TextButton.styleFrom(

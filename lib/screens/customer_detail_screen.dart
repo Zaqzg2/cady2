@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:printing/printing.dart';
 
 import '../models/customer.dart';
 import '../models/customer_stats.dart';
+import '../models/company_settings.dart' show StatementFormat;
 import '../models/ledger_entry.dart';
 import '../models/invoice.dart';
 import '../models/receipt.dart';
@@ -33,6 +35,7 @@ class CustomerDetailScreen extends StatefulWidget {
 class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   late Future<List<LedgerEntry>> _entriesFuture;
   late Future<CustomerStats> _statsFuture;
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -40,10 +43,25 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     _reload();
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   void _reload() {
     final app = context.read<AppProvider>();
     _entriesFuture = app.getCustomerStatement(widget.customer.id);
     _statsFuture = app.getCustomerStats(widget.customer.id);
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+    );
   }
 
   Customer get _customer {
@@ -75,6 +93,14 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
 
   Future<void> _printStatement() async {
     final bytes = await _buildStatementPdf();
+    final app = context.read<AppProvider>();
+    // صيغة A4 قد تكون عدّة صفحات، ولا معنى لإرسالها لطابعة حرارية 80مم
+    // عبر البلوتوث (تطبع الصفحة الأولى فقط بعرض ملتوٍ). لذلك تُفتَح هنا
+    // بحوار الطباعة العادي بالنظام، الذي يدعم أي طابعة متاحة أو الحفظ PDF.
+    if (app.settings.defaultStatementFormat == StatementFormat.a4) {
+      await Printing.layoutPdf(onLayout: (format) async => bytes);
+      return;
+    }
     final ok = await PrintService.instance.printPdfBytes(bytes);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -461,6 +487,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       body: RefreshIndicator(
         onRefresh: () async => setState(_reload),
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(12),
           children: [
             _buildHeader(),
@@ -672,6 +699,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
                 _headerIcon(Icons.print_outlined, 'طباعة', _printStatement),
                 _headerIcon(Icons.share_outlined, 'مشاركة', _shareStatement),
                 _headerIcon(Icons.download_outlined, 'تحميل', _downloadStatement),
+                _headerIcon(Icons.vertical_align_top, 'أعلى الصفحة', _scrollToTop),
               ],
             ),
           ],
@@ -739,7 +767,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: isOpening ? null : () => _openEntry(e),
+        onTap: isOpening ? null : () => _previewEntry(e),
         onLongPress: () => _showEntryMenu(e),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

@@ -41,6 +41,11 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
       penStrokeWidth: 3,
       penColor: Colors.black,
       exportBackgroundColor: Colors.white,
+      // يحفظ التوقيع تلقائيًا فور رفع الإصبع بعد كل خط، بدون الحاجة لزر
+      // "اعتماد التوقيع" — كل خط جديد يستبدل الحفظة السابقة بنفس المفتاح
+      // (_save تتعامل مع هذا عبر ImageStore.save(key: _existingKey))، وينتهي
+      // الأمر بحفظ التوقيع الكامل تلقائيًا بعد آخر خط يرسمه المستخدم.
+      onDrawEnd: _save,
     );
     _existingKey = widget.existingPath;
     if (_existingKey != null) {
@@ -140,15 +145,6 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                       backgroundColor: Colors.white,
                     ),
         ),
-        const SizedBox(height: 6),
-        if (!_showingExistingImage && !_loadingExisting)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: _save,
-              child: const Text('اعتماد التوقيع'),
-            ),
-          ),
       ],
     );
   }

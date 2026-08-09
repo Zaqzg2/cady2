@@ -56,12 +56,14 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
 
   Future<void> _connectPrinter(PrinterDevice device) async {
     final ok = await PrintService.instance.connect(device.macAddress);
+    if (!mounted) return;
     if (ok) {
       final app = context.read<AppProvider>();
       final s = app.settings;
       s.printerAddress = device.macAddress;
       s.printerName = device.name;
       await app.saveSettings(s);
+      if (!mounted) return;
       setState(() => _selectedPrinterMac = device.macAddress);
       _snack('تم الاتصال بالطابعة ${device.name}');
     } else {
@@ -75,6 +77,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
     s.printerAddress = null;
     s.printerName = null;
     await app.saveSettings(s);
+    if (!mounted) return;
     setState(() => _selectedPrinterMac = null);
   }
 

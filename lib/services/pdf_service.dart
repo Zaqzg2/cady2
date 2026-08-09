@@ -117,7 +117,13 @@ class PdfService {
     final signatureBytes = await ImageStore.instance.load(inv.signaturePath);
     final df = DateFormat('yyyy/MM/dd');
     final title = inv.kind == InvoiceKind.sale ? 'فاتورة بيع' : 'فاتورة مرتجع';
-    final visibleCols = settings.tableColumns.where((c) => c.visible).toList();
+    // ملاحظة RTL: مكتبة pdf لا "تعكس" ترتيب أعمدة pw.Table تلقائيًا حسب
+    // اتجاه اللغة (بعكس pw.Row الذي عالجناه يدويًا في _kv بوضع القيمة قبل
+    // العنوان). لذلك نعكس ترتيب القائمة هنا فقط، مرة واحدة، بحيث يظهر أول
+    // عمود منطقي (الصنف) على أقصى اليمين كما في القراءة العربية الصحيحة —
+    // نفس الترتيب المستخدم في جدول كشف الحساب أدناه.
+    final visibleCols =
+        settings.tableColumns.where((c) => c.visible).toList().reversed.toList();
 
     final doc = pw.Document();
     doc.addPage(
@@ -133,6 +139,8 @@ class PdfService {
               _kv('رقم الفاتورة', inv.docNumber, settings),
               _kv('التاريخ', df.format(inv.date), settings),
               _kv('العميل', inv.customerName, settings),
+              if (inv.repName.trim().isNotEmpty)
+                _kv('المندوب', inv.repName, settings),
               _kv('نوع الدفع',
                   inv.paymentMode == PaymentMode.cash ? 'نقدًا' : 'آجل', settings),
               pw.Divider(thickness: 0.5),
@@ -260,6 +268,8 @@ class PdfService {
               _kv('رقم السند', r.docNumber, settings),
               _kv('التاريخ', df.format(r.date), settings),
               _kv('العميل', r.customerName, settings),
+              if (r.repName.trim().isNotEmpty)
+                _kv('المندوب', r.repName, settings),
               _kv('طريقة الدفع',
                   r.method == ReceiptMethod.cash ? 'نقدًا' : 'تحويل', settings),
               pw.Divider(thickness: 0.5),
@@ -300,8 +310,9 @@ class PdfService {
     return doc.save();
   }
 
-  /// كشف حساب العميل — بعكس الفاتورة/السند (80مم حراري)، يُستخدم مقاس A4
-  /// عادي هنا لأن كشف الحساب قد يحتوي عشرات الصفوف ولا يُطبع على طابعة حرارية.
+  /// كشف حساب العميل — يدعم صيغتين حسب إعدادات الشركة: 80مم حراري (صفحة
+  /// واحدة مستمرة الطول عبر pw.Page، تمامًا كالفاتورة/السند) أو A4 عادي
+  /// (صفحات متعددة حقيقية عبر pw.MultiPage، مناسب لكشوفات طويلة).
   Future<Uint8List> generateStatementPdf(
     String customerName,
     List<LedgerEntry> entries,
@@ -325,89 +336,128 @@ class PdfService {
       }
     }
 
-    final pageFormat = settings.defaultStatementFormat == StatementFormat.thermal80
-        ? PdfPageFormat.roll80
-        : PdfPageFormat.a4;
-    doc.addPage(
-      pw.MultiPage(
-        pageFormat: pageFormat,
-        margin: const pw.EdgeInsets.all(24),
-        header: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            _header(settings,
-                docTitle: 'كشف حساب: $customerName', logoBytes: logoBytes),
-            pw.SizedBox(height: 8),
-          ],
-        ),
-        build: (context) => [
-          pw.Table(
-            border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey700),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(1.3), // التاريخ
-              1: pw.FlexColumnWidth(2), // البيان
-              2: pw.FlexColumnWidth(1.3), // رقم المستند
-              3: pw.FlexColumnWidth(1.2), // مدين
-              4: pw.FlexColumnWidth(1.2), // دائن
-              5: pw.FlexColumnWidth(1.4), // الرصيد
-            },
+    final isThermal = settings.defaultStatementFormat == StatementFormat.thermal80;
+    final pageFormat = isThermal ? PdfPageFormat.roll80 : PdfPageFormat.a4;
+
+    // ترتيب الأعمدة معكوس عمدًا هنا (الرصيد أولاً بالقائمة) لأن pw.Table
+    // يضع العنصر الأول بالقائمة أقصى اليسار دائمًا (لا يوجد عكس تلقائي
+    // حسب اتجاه اللغة في هذه المكتبة، بعكس pw.Row الذي عالجناه يدويًا في
+    // _kv). هذا يجعل "التاريخ" (أول عمود منطقيًا) يظهر أقصى اليمين، مطابقًا
+    // للقراءة العربية الصحيحة.
+    pw.Widget buildTable() {
+      return pw.Table(
+        border: pw.TableBorder.all(width: 0.5, color: PdfColors.grey700),
+        columnWidths: const {
+          0: pw.FlexColumnWidth(1.4), // الرصيد
+          1: pw.FlexColumnWidth(1.2), // دائن
+          2: pw.FlexColumnWidth(1.2), // مدين
+          3: pw.FlexColumnWidth(1.3), // رقم المستند
+          4: pw.FlexColumnWidth(2), // البيان
+          5: pw.FlexColumnWidth(1.3), // التاريخ
+        },
+        children: [
+          pw.TableRow(
+            decoration: const pw.BoxDecoration(color: PdfColors.grey300),
             children: [
-              pw.TableRow(
-                decoration: const pw.BoxDecoration(color: PdfColors.grey300),
-                children: [
-                  'التاريخ',
-                  'البيان',
-                  'رقم المستند',
-                  'مدين',
-                  'دائن',
-                  'الرصيد',
-                ]
-                    .map((h) => pw.Padding(
-                          padding: const pw.EdgeInsets.all(4),
-                          child: pw.Text(
-                            h,
-                            style: pw.TextStyle(
-                                font: _arabicFontBold,
-                                fontSize: settings.tableFontSize),
-                            textDirection: pw.TextDirection.rtl,
-                            textAlign: pw.TextAlign.center,
-                          ),
-                        ))
-                    .toList(),
-              ),
-              for (final e in entries)
-                pw.TableRow(
-                  children: [
-                    df.format(e.date),
-                    docTypeLabel(e.docType),
-                    e.docNumber,
-                    e.debit > 0 ? _currency.format(e.debit) : '-',
-                    e.credit > 0 ? _currency.format(e.credit) : '-',
-                    _currency.format(e.runningBalance),
-                  ]
-                      .map((v) => pw.Padding(
-                            padding: pw.EdgeInsets.symmetric(
-                                vertical: settings.rowSpacing, horizontal: 3),
-                            child: pw.Text(
-                              v,
-                              style: pw.TextStyle(
-                                  font: _arabicFont,
-                                  fontSize: settings.tableFontSize),
-                              textDirection: pw.TextDirection.rtl,
-                              textAlign: pw.TextAlign.center,
-                            ),
-                          ))
-                      .toList(),
-                ),
+              'الرصيد',
+              'دائن',
+              'مدين',
+              'رقم المستند',
+              'البيان',
+              'التاريخ',
+            ]
+                .map((h) => pw.Padding(
+                      padding: const pw.EdgeInsets.all(4),
+                      child: pw.Text(
+                        h,
+                        style: pw.TextStyle(
+                            font: _arabicFontBold,
+                            fontSize: settings.tableFontSize),
+                        textDirection: pw.TextDirection.rtl,
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ))
+                .toList(),
+          ),
+          for (final e in entries)
+            pw.TableRow(
+              children: [
+                _currency.format(e.runningBalance),
+                e.credit > 0 ? _currency.format(e.credit) : '-',
+                e.debit > 0 ? _currency.format(e.debit) : '-',
+                e.docNumber,
+                docTypeLabel(e.docType),
+                df.format(e.date),
+              ]
+                  .map((v) => pw.Padding(
+                        padding: pw.EdgeInsets.symmetric(
+                            vertical: settings.rowSpacing, horizontal: 3),
+                        child: pw.Text(
+                          v,
+                          style: pw.TextStyle(
+                              font: _arabicFont,
+                              fontSize: settings.tableFontSize),
+                          textDirection: pw.TextDirection.rtl,
+                          textAlign: pw.TextAlign.center,
+                        ),
+                      ))
+                  .toList(),
+            ),
+        ],
+      );
+    }
+
+    final summary = entries.isEmpty
+        ? null
+        : _kv('الرصيد الحالي', _currency.format(entries.last.runningBalance),
+            settings, fontSize: 12);
+
+    if (isThermal) {
+      // صيغة 80مم: صفحة واحدة مستمرة الطول بدون تقسيم صفحات — تمامًا مثل
+      // generateInvoicePdf/generateReceiptPdf أعلاه. هذا هو صلب إصلاح مشكلة
+      // "الصفحة البيضاء": roll80 ارتفاعه غير محدود، واستخدام MultiPage معه
+      // (كما كان سابقًا) يُنتج صفحات فارغة لأن خوارزمية تقسيم صفحات
+      // MultiPage لا تتعامل بشكل صحيح مع ارتفاع صفحة غير محدود.
+      doc.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(8),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              _header(settings,
+                  docTitle: 'كشف حساب: $customerName', logoBytes: logoBytes),
+              pw.SizedBox(height: 8),
+              buildTable(),
+              pw.SizedBox(height: 12),
+              if (summary != null) summary,
             ],
           ),
-          pw.SizedBox(height: 12),
-          if (entries.isNotEmpty)
-            _kv('الرصيد الحالي', _currency.format(entries.last.runningBalance), settings,
-                fontSize: 12),
-        ],
-      ),
-    );
+        ),
+      );
+    } else {
+      // صيغة A4: كشف الحساب قد يحتوي عشرات الصفوف، فيحتاج تقسيم صفحات
+      // حقيقي — MultiPage مناسب هنا تمامًا لأن ارتفاع صفحة A4 محدود.
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: pageFormat,
+          margin: const pw.EdgeInsets.all(24),
+          header: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
+            children: [
+              _header(settings,
+                  docTitle: 'كشف حساب: $customerName', logoBytes: logoBytes),
+              pw.SizedBox(height: 8),
+            ],
+          ),
+          build: (context) => [
+            buildTable(),
+            pw.SizedBox(height: 12),
+            if (summary != null) summary,
+          ],
+        ),
+      );
+    }
     return doc.save();
   }
 }
