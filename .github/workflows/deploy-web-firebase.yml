@@ -1,0 +1,69 @@
+name: نشر نسخة الويب على Firebase Hosting
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy_web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: استنساخ المستودع
+        uses: actions/checkout@v4
+
+      - name: تجهيز Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: تفعيل دعم الويب
+        run: flutter config --enable-web
+
+      # firebase_options.dart الموجود بالمستودع placeholder بقيم وهمية
+      # (عشان الكود يبني بدون أخطاء). هنا نستبدله بالملف الحقيقي المخزّن
+      # كسر — نفس محتوى الملف اللي ولّده flutterfire configure عندك محلياً.
+      - name: كتابة firebase_options.dart الحقيقي من الأسرار
+        env:
+          FIREBASE_OPTIONS_DART: ${{ secrets.FIREBASE_OPTIONS_DART }}
+        run: |
+          if [ -n "$FIREBASE_OPTIONS_DART" ]; then
+            echo "$FIREBASE_OPTIONS_DART" > lib/firebase_options.dart
+            echo "تم كتابة firebase_options.dart الحقيقي من السر FIREBASE_OPTIONS_DART"
+          else
+            echo "تحذير: السر FIREBASE_OPTIONS_DART غير موجود — سيُبنى الموقع بقيم Firebase وهمية (مزامنة سحابية وتسجيل دخول لن يعملا)"
+          fi
+
+      - name: تنزيل حزم Dart/Flutter
+        run: flutter pub get
+
+      - name: بناء نسخة الويب (release)
+        run: flutter build web --release
+
+      # لو السر FIREBASE_SERVICE_ACCOUNT غير موجود بعد، نوقف هنا بوضوح
+      # بدل ما نخلي فعل النشر يفشل برسالة خطأ مبهمة من الأكشن نفسه
+      - name: التحقق من وجود أسرار النشر المطلوبة
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ] || [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo "❌ ناقص أحد السرّين FIREBASE_SERVICE_ACCOUNT أو FIREBASE_PROJECT_ID"
+            echo "   راجع قسم GitHub Actions في FIREBASE_SETUP.md لمعرفة كيف تضيفهما."
+            exit 1
+          fi
+          echo "✅ الأسرار موجودة، جاري النشر"
+
+      - name: نشر build/web على Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}'
+          projectId: '${{ secrets.FIREBASE_PROJECT_ID }}'
+          channelId: live

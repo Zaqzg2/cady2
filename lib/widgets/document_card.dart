@@ -76,7 +76,9 @@ class DocumentCard extends StatelessWidget {
 
   Future<void> _print(BuildContext context) async {
     final bytes = await _pdfBytes(context);
-    final ok = await PrintService.instance.printPdfBytes(bytes);
+    if (!context.mounted) return;
+    final mac = context.read<AppProvider>().settings.printerAddress;
+    final ok = await PrintService.instance.printPdfBytes(bytes, printerMac: mac);
     if (!context.mounted) return;
     _snack(context, ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة');
     if (ok) {

@@ -25,6 +25,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
   List<PrinterDevice> _pairedDevices = [];
   String? _selectedPrinterMac;
   bool _loadingDevices = false;
+  bool _liveConnected = false;
 
   @override
   void initState() {
@@ -46,9 +47,26 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       if (mounted) setState(() => _pairedDevices = list);
     } catch (_) {
       // البلوتوث قد لا يكون مفعّلاً أو الصلاحيات غير ممنوحة بعد
-    } finally {
-      if (mounted) setState(() => _loadingDevices = false);
     }
+    await _refreshLiveStatus();
+    if (mounted) setState(() => _loadingDevices = false);
+  }
+
+  /// حالة "متصلة" بالإعدادات كانت تُبنى فقط من كون عنوان الطابعة محفوظًا
+  /// (آخر طابعة نجح الاتصال بها)، بغض النظر عن حالة مقبس البلوتوث الفعلية
+  /// الآن — وهي تنقطع بصمت كثيرًا (خمول، قفل الشاشة...). لذلك نتحقق من
+  /// الاتصال الحي هنا، ونحاول استعادته تلقائيًا وبصمت إن انقطع، بدل إظهار
+  /// شارة "متصلة" مضلِّلة لا تعكس ما سيحدث فعلًا عند الطباعة.
+  Future<void> _refreshLiveStatus() async {
+    if (_selectedPrinterMac == null) {
+      if (mounted) setState(() => _liveConnected = false);
+      return;
+    }
+    var live = await PrintService.instance.isConnected;
+    if (!live) {
+      live = await PrintService.instance.connect(_selectedPrinterMac!);
+    }
+    if (mounted) setState(() => _liveConnected = live);
   }
 
   void _snack(String msg) =>
@@ -64,7 +82,10 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       s.printerName = device.name;
       await app.saveSettings(s);
       if (!mounted) return;
-      setState(() => _selectedPrinterMac = device.macAddress);
+      setState(() {
+        _selectedPrinterMac = device.macAddress;
+        _liveConnected = true;
+      });
       _snack('تم الاتصال بالطابعة ${device.name}');
     } else {
       _snack('تعذّر الاتصال بالطابعة');
@@ -77,8 +98,12 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
     s.printerAddress = null;
     s.printerName = null;
     await app.saveSettings(s);
+    await PrintService.instance.disconnect();
     if (!mounted) return;
-    setState(() => _selectedPrinterMac = null);
+    setState(() {
+      _selectedPrinterMac = null;
+      _liveConnected = false;
+    });
   }
 
   Future<void> _saveNumbers() async {
@@ -95,7 +120,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final connected = _selectedPrinterMac != null;
+    final connected = _liveConnected;
     final app = context.watch<AppProvider>();
     return Scaffold(
       appBar: AppBar(

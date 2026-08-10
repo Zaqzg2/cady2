@@ -15,6 +15,11 @@ class UserAccount {
   DateTime? lastSyncAt;
   DateTime createdAt;
   DateTime updatedAt;
+  // uid حساب Firebase Auth المرتبط بهذا المستخدم (إن وُجد) — يُستخدم فقط
+  // عشان Firestore rules تعرف صاحب كل سجل وقت المزامنة السحابية. يبقى
+  // null إذا Firebase غير مفعّل أو فشل إنشاء الحساب السحابي وقتها (بدون
+  // ما يمنع إنشاء/استخدام الحساب المحلي إطلاقًا)
+  String? cloudUid;
 
   UserAccount({
     required this.id,
@@ -28,6 +33,7 @@ class UserAccount {
     this.lastSyncAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    this.cloudUid,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now();
 
@@ -43,6 +49,7 @@ class UserAccount {
         'lastSyncAt': lastSyncAt?.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
+        'cloudUid': cloudUid,
       };
 
   factory UserAccount.fromMap(Map<String, dynamic> m) => UserAccount(
@@ -59,5 +66,6 @@ class UserAccount {
             : null,
         createdAt: DateTime.parse(m['createdAt'] as String),
         updatedAt: DateTime.parse(m['updatedAt'] as String),
+        cloudUid: m['cloudUid'] as String?,
       );
 }

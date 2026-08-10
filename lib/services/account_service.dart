@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/user_account.dart';
 import 'db_service.dart';
+import 'firebase_auth_bridge_service.dart';
 
 /// إدارة حسابات المستخدمين (مدير/مندوب) وجلسة الدخول الحالية. كلمة المرور
 /// تُشفَّر بنفس أسلوب AuthService (SHA-256 محلي فقط، بلا أي اتصال بخادم)،
@@ -48,6 +50,22 @@ class AccountService {
       repNumber: repNumber.trim(),
     );
     await DbService.instance.upsertUser(user);
+
+    // إنشاء الحساب السحابي المرتبط بالخلفية — ما ننتظره هنا حتى يبقى
+    // إنشاء الحساب المحلي فوريًا بغض النظر عن حالة الاتصال، وحال ما
+    // يجهز الـ uid نحدّث السجل المحلي فيه (لأغراض Firestore rules فقط)
+    unawaited(FirebaseAuthBridgeService.instance
+        .createLinkedAuthAccount(
+      username: user.username,
+      rawPassword: rawPassword,
+      role: role.name,
+    )
+        .then((uid) async {
+      if (uid == null) return;
+      user.cloudUid = uid;
+      await DbService.instance.upsertUser(user);
+    }));
+
     return user;
   }
 
@@ -77,6 +95,12 @@ class AccountService {
     if (match == null || !match.isActive) return null;
     if (match.passwordHash != _hash(rawPassword)) return null;
     await setSession(match.id);
+    // فتح جلسة Firebase Auth بالخلفية (بدون انتظار) — الدخول المحلي
+    // نجح فعلاً في السطر اللي فوق بغض النظر عن نتيجتها
+    unawaited(FirebaseAuthBridgeService.instance.signInLinkedAccount(
+      username: match.username,
+      rawPassword: rawPassword,
+    ));
     return match;
   }
 

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:signature/signature.dart';
 
 import '../services/image_store.dart';
@@ -25,6 +27,7 @@ class SignaturePadWidget extends StatefulWidget {
 
 class _SignaturePadWidgetState extends State<SignaturePadWidget> {
   late final SignatureController _controller;
+  final _boundaryKey = GlobalKey();
   // إذا كان هناك توقيع محفوظ مسبقًا (تعديل فاتورة قديمة)، نعرضه كصورة
   // ثابتة بدل لوحة رسم فاضية، حتى لا يُعتبر "فاضياً" ويُمسح بالخطأ عند
   // الحفظ دون رسم توقيع جديد. المستخدم يقدر يضغط "إعادة التوقيع" إذا
@@ -38,9 +41,8 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
   void initState() {
     super.initState();
     _controller = SignatureController(
-      penStrokeWidth: 3,
+      penStrokeWidth: 4,
       penColor: Colors.black,
-      exportBackgroundColor: Colors.white,
       // يحفظ التوقيع تلقائيًا فور رفع الإصبع بعد كل خط، بدون الحاجة لزر
       // "اعتماد التوقيع" — كل خط جديد يستبدل الحفظة السابقة بنفس المفتاح
       // (_save تتعامل مع هذا عبر ImageStore.save(key: _existingKey))، وينتهي
@@ -78,8 +80,23 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
       widget.onSaved(_existingKey);
       return;
     }
-    final data = await _controller.toPngBytes();
-    if (data == null) return;
+    // ملاحظة مهمة حول جودة الصورة: SignatureController.toPngBytes() يُصدّر
+    // بأبعاد صندوق الخطوط المرسومة بالبكسل المنطقي (logical pixels) فقط،
+    // وليس بكثافة بكسلات الجهاز الفعلية — فتخرج صورة منخفضة الدقة تُعرض
+    // لاحقًا مكبَّرة داخل نفس الصندوق، فتظهر عريضة ومُبكسلة (هذا بالضبط ما
+    // كان يظهر). لذلك نلتقط الصورة مباشرة من الشاشة عبر RepaintBoundary
+    // بنفس كثافة بكسلات الجهاز — يطابق تمامًا ما يُرسم حيًا، بدقة كاملة.
+    await WidgetsBinding.instance.endOfFrame; // نضمن اكتمال رسم آخر خط أولاً
+    if (!mounted) return;
+    final boundary =
+        _boundaryKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+    if (boundary == null) return;
+    final dpr = MediaQuery.of(context).devicePixelRatio;
+    final image = await boundary.toImage(pixelRatio: dpr);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    if (byteData == null) return;
+    final data = byteData.buffer.asUint8List();
     final key = await ImageStore.instance.save(data, key: _existingKey);
     _existingKey = key;
     _existingBytes = data;
@@ -140,9 +157,12 @@ class _SignaturePadWidgetState extends State<SignaturePadWidget> {
                         ),
                       ],
                     )
-                  : Signature(
-                      controller: _controller,
-                      backgroundColor: Colors.white,
+                  : RepaintBoundary(
+                      key: _boundaryKey,
+                      child: Signature(
+                        controller: _controller,
+                        backgroundColor: Colors.white,
+                      ),
                     ),
         ),
       ],

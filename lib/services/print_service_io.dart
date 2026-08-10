@@ -38,8 +38,18 @@ class PrintService {
 
   /// يحوّل أول صفحة من ملف PDF (المُصمَّم أصلاً بعرض 80مم) إلى صورة، ثم
   /// يطبعها عبر البلوتوث على طابعة 80مم حرارية متصلة مسبقًا.
-  Future<bool> printPdfBytes(Uint8List pdfBytes) async {
-    final connected = await isConnected;
+  ///
+  /// [printerMac] عنوان آخر طابعة محفوظة بالإعدادات (اختياري). مقبس
+  /// البلوتوث الفعلي ينقطع بصمت أحيانًا كثيرة (بعد قفل الشاشة، خمول لبضع
+  /// دقائق، تذبذب الراديو...) حتى لو بقيت الإعدادات تُظهر "متصلة" لأنها
+  /// تعرض آخر طابعة نجح الاتصال بها فقط، وليس حالة المقبس الحيّة. لذلك إن
+  /// لم يكن هناك اتصال فعلي الآن، نحاول إعادة الاتصال تلقائيًا بهذا العنوان
+  /// قبل اعتبار الطباعة فاشلة.
+  Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
+    var connected = await isConnected;
+    if (!connected && printerMac != null && printerMac.isNotEmpty) {
+      connected = await connect(printerMac);
+    }
     if (!connected) return false;
 
     // عرض 80مم عند 203 نقطة/إنش (الدقة القياسية لأغلب طابعات الإيصالات)

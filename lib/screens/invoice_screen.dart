@@ -221,7 +221,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     if (inv == null) return;
     final app = context.read<AppProvider>();
     final bytes = await PdfService.instance.generateInvoicePdf(inv, app.settings);
-    final ok = await PrintService.instance.printPdfBytes(bytes);
+    final ok = await PrintService.instance
+        .printPdfBytes(bytes, printerMac: app.settings.printerAddress);
     _snack(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة — تحقق من الإعدادات');
   }
 
