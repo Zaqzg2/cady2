@@ -36,22 +36,54 @@ class PrintService {
 
   Future<void> disconnect() => PrintBluetoothThermal.disconnect;
 
-  /// يحوّل أول صفحة من ملف PDF (المُصمَّم أصلاً بعرض 80مم) إلى صورة، ثم
-  /// يطبعها عبر البلوتوث على طابعة 80مم حرارية متصلة مسبقًا.
+  /// إرسال [bytes] فعليًا للطابعة مع تحقّق حقيقي من الاتصال، وليس فقط
+  /// الاعتماد على connectionStatus.
   ///
-  /// [printerMac] عنوان آخر طابعة محفوظة بالإعدادات (اختياري). مقبس
-  /// البلوتوث الفعلي ينقطع بصمت أحيانًا كثيرة (بعد قفل الشاشة، خمول لبضع
-  /// دقائق، تذبذب الراديو...) حتى لو بقيت الإعدادات تُظهر "متصلة" لأنها
-  /// تعرض آخر طابعة نجح الاتصال بها فقط، وليس حالة المقبس الحيّة. لذلك إن
-  /// لم يكن هناك اتصال فعلي الآن، نحاول إعادة الاتصال تلقائيًا بهذا العنوان
-  /// قبل اعتبار الطباعة فاشلة.
-  Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
+  /// السبب الجذري للعطل المُبلَّغ عنه ("متصلة" بالإعدادات لكن الطباعة
+  /// تفشل): مقبس بلوتوث أندرويد/iOS لا يوفر طريقة تسأل بها "هل ما زلت حيًا
+  /// الآن فعلًا؟" — connectionStatus يعكس فقط "هل نجح connect() سابقًا ولم
+  /// يُستدعَ disconnect() بعده"، حتى لو انقطع الاتصال فعليًا بصمت (قفل
+  /// الشاشة، خمول لبضع دقائق، تذبذب الراديو...). الإصلاح السابق كان يعيد
+  /// الاتصال فقط عندما تُرجع isConnected قيمة false — لكنها هنا بالذات
+  /// تُرجع true بشكل خاطئ/قديم، فلا يُنفَّذ أي تعافٍ إطلاقًا، وتفشل الكتابة
+  /// الفعلية لاحقًا بلا أي محاولة إنقاذ.
+  ///
+  /// الحل: لا نثق بـ connectionStatus وحدها. نحاول الاتصال إن لم نكن
+  /// "متصلين" حسب آخر حالة معروفة، ثم نكتب فعليًا. إن فشلت الكتابة رغم ذلك
+  /// (أي أن المقبس كان ميتًا بصمت)، نفرض إعادة اتصال كاملة (فصل ثم اتصال)
+  /// بنفس العنوان المحفوظ ونعيد الكتابة مرة واحدة أخيرة قبل اعتبارها فشلت.
+  Future<bool> _writeVerified(Uint8List bytes, String? printerMac) async {
     var connected = await isConnected;
     if (!connected && printerMac != null && printerMac.isNotEmpty) {
       connected = await connect(printerMac);
     }
     if (!connected) return false;
 
+    var ok = await PrintBluetoothThermal.writeBytes(bytes);
+    if (!ok && printerMac != null && printerMac.isNotEmpty) {
+      await PrintBluetoothThermal.disconnect;
+      if (await connect(printerMac)) {
+        ok = await PrintBluetoothThermal.writeBytes(bytes);
+      }
+    }
+    return ok;
+  }
+
+  /// أمر تهيئة ESC/POS صامت (ESC @) — لا يطبع شيئًا ولا يغذّي ورقًا مرئيًا،
+  /// يُستخدم فقط للتحقق أن الكتابة الفعلية على المقبس تنجح.
+  static final Uint8List _pingBytes = Uint8List.fromList(const [0x1B, 0x40]);
+
+  /// تحقّق حقيقي من الاتصال بالطابعة عبر كتابة فعلية صغيرة، وليس
+  /// connectionStatus وحدها (راجع شرح _writeVerified أعلاه). تستخدمها شاشة
+  /// الإعدادات لعرض حالة "متصلة" تعكس فعلًا ما سيحدث عند الطباعة الحقيقية،
+  /// بدل شارة متفائلة قد تكون كاذبة.
+  Future<bool> verifyConnection(String? printerMac) =>
+      _writeVerified(_pingBytes, printerMac);
+
+  /// يحوّل أول صفحة من ملف PDF (المُصمَّم أصلاً بعرض 80مم) إلى صورة، ثم
+  /// يطبعها عبر البلوتوث على طابعة 80مم حرارية متصلة مسبقًا، مع تحقّق
+  /// واستعادة تلقائية للاتصال عبر _writeVerified (راجع توثيقها أعلاه).
+  Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
     // عرض 80مم عند 203 نقطة/إنش (الدقة القياسية لأغلب طابعات الإيصالات)
     // 80mm ≈ 3.15in => العرض بالبكسل ≈ 576
     const targetWidthPx = 576;
@@ -77,6 +109,6 @@ class PrintService {
     bytes += generator.feed(2);
     bytes += generator.cut();
 
-    return PrintBluetoothThermal.writeBytes(Uint8List.fromList(bytes));
+    return _writeVerified(Uint8List.fromList(bytes), printerMac);
   }
 }

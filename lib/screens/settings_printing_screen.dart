@@ -62,10 +62,11 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       if (mounted) setState(() => _liveConnected = false);
       return;
     }
-    var live = await PrintService.instance.isConnected;
-    if (!live) {
-      live = await PrintService.instance.connect(_selectedPrinterMac!);
-    }
+    // تحقّق حقيقي (كتابة فعلية على المقبس) بدل الاكتفاء بـ isConnected —
+    // نفس آلية التحقق المستخدمة عند الطباعة الفعلية بالضبط (راجع
+    // _writeVerified في print_service_io.dart)، حتى لا تعرض هذه الشاشة
+    // "متصلة" بينما الطباعة الفعلية تفشل.
+    final live = await PrintService.instance.verifyConnection(_selectedPrinterMac);
     if (mounted) setState(() => _liveConnected = live);
   }
 
