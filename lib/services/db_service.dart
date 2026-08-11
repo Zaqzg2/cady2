@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:hive_ce_flutter/hive_ce_flutter.dart';
 
 import '../models/customer.dart';
@@ -9,7 +7,6 @@ import '../models/receipt.dart';
 import '../models/user_account.dart';
 import '../models/sync_log_entry.dart';
 import '../models/export_log_entry.dart';
-import 'cloud_sync_service.dart';
 
 /// طبقة الوصول لقاعدة بيانات التطبيق — Hive بالكامل (nosql محلي سريع
 /// يعمل بنفس الطريقة على الجوال والويب عبر IndexedDB). كل سجل يُخزَّن
@@ -62,15 +59,11 @@ class DbService {
   Future<void> upsertCustomer(Customer c) async {
     await _ensureReady();
     await _customersBox.put(c.id, c.toMap());
-    // دفع للسحابة بالخلفية (fire-and-forget) — لا ننتظر نتيجتها حتى لا
-    // نؤخر أي عملية محلية، وتتجاهل نفسها بصمت إذا Firebase غير مفعّل
-    unawaited(CloudSyncService.instance.pushCustomer(c));
   }
 
   Future<void> deleteCustomer(String id) async {
     await _ensureReady();
     await _customersBox.delete(id);
-    unawaited(CloudSyncService.instance.pushDeleteCustomer(id));
   }
 
   Future<List<Customer>> getCustomers() async {
@@ -89,13 +82,11 @@ class DbService {
   Future<void> upsertProduct(Product p) async {
     await _ensureReady();
     await _productsBox.put(p.id, p.toMap());
-    unawaited(CloudSyncService.instance.pushProduct(p));
   }
 
   Future<void> deleteProduct(String id) async {
     await _ensureReady();
     await _productsBox.delete(id);
-    unawaited(CloudSyncService.instance.pushDeleteProduct(id));
   }
 
   Future<List<Product>> getProducts() async {
@@ -110,13 +101,11 @@ class DbService {
   Future<void> upsertInvoice(Invoice inv) async {
     await _ensureReady();
     await _invoicesBox.put(inv.id, inv.toMap());
-    unawaited(CloudSyncService.instance.pushInvoice(inv));
   }
 
   Future<void> deleteInvoice(String id) async {
     await _ensureReady();
     await _invoicesBox.delete(id);
-    unawaited(CloudSyncService.instance.pushDeleteInvoice(id));
   }
 
   Future<List<Invoice>> getInvoices({String? customerId}) async {
@@ -141,13 +130,11 @@ class DbService {
   Future<void> upsertReceipt(Receipt r) async {
     await _ensureReady();
     await _receiptsBox.put(r.id, r.toMap());
-    unawaited(CloudSyncService.instance.pushReceipt(r));
   }
 
   Future<void> deleteReceipt(String id) async {
     await _ensureReady();
     await _receiptsBox.delete(id);
-    unawaited(CloudSyncService.instance.pushDeleteReceipt(id));
   }
 
   Future<List<Receipt>> getReceipts({String? customerId}) async {

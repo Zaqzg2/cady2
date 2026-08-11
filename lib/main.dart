@@ -16,11 +16,8 @@ import 'screens/setup_manager_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/manager/manager_root_nav.dart';
 import 'services/auth_service.dart';
-import 'services/cloud_sync_service.dart';
 import 'models/user_account.dart';
 import 'widgets/privacy_cover_overlay.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 
 /// يحسب أقصر مدة خمول مؤدّية لقفل التطبيق تلقائيًا، بين خيار "القفل
 /// التلقائي" و"تسجيل الخروج التلقائي" (أيهما أقصر يُطبَّق أولاً)، أو
@@ -52,7 +49,7 @@ void main() {
   // نلتقط أي خطأ غير متوقّع في أي مكان بالتطبيق (بما فيه أخطاء غير متزامنة)
   // ونطبعه بوضوح في السجل (logcat) بدل ما يختفي بصمت ويترك المستخدم أمام
   // شاشة بيضاء بلا أي تفسير.
-  runZonedGuarded(() async {
+  runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
     FlutterError.onError = (FlutterErrorDetails details) {
       FlutterError.presentError(details);
@@ -85,18 +82,6 @@ void main() {
         ),
       );
     };
-
-    // تهيئة Firebase لتفعيل مزامنة سحابية اختيارية (CloudSyncService).
-    // التطبيق يبقى يشتغل بالكامل محليًا عبر Hive حتى لو فشلت هذه الخطوة
-    // (مثلاً قبل تشغيل flutterfire configure، أو بدون إنترنت الآن) —
-    // لهذا السبب هي داخل try/catch ولا توقف إقلاع التطبيق أبدًا.
-    try {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-      CloudSyncService.instance.startListening();
-    } catch (e) {
-      debugPrint('Firebase init skipped (سيعمل التطبيق محليًا فقط): $e');
-    }
-
     runApp(const CadySalesApp());
   }, (error, stack) {
     debugPrint('Uncaught zone error: $error');
