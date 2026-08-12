@@ -223,7 +223,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     final bytes = await PdfService.instance.generateInvoicePdf(inv, app.settings);
     final ok = await PrintService.instance
         .printPdfBytes(bytes, printerMac: app.settings.printerAddress);
-    _snack(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة — تحقق من الإعدادات');
+    if (!mounted) return;
+    showPrintResultSnack(context, ok);
   }
 
   Future<void> _downloadPdf() async {

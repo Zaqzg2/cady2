@@ -80,7 +80,7 @@ class DocumentCard extends StatelessWidget {
     final mac = context.read<AppProvider>().settings.printerAddress;
     final ok = await PrintService.instance.printPdfBytes(bytes, printerMac: mac);
     if (!context.mounted) return;
-    _snack(context, ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة');
+    showPrintResultSnack(context, ok);
     if (ok) {
       final app = context.read<AppProvider>();
       if (row.invoice != null) {

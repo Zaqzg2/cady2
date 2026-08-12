@@ -467,12 +467,12 @@ class PdfService {
             children: [
               _header(settings,
                   docTitle: 'كشف حساب: $customerName', logoBytes: logoBytes),
-              pw.SizedBox(height: 8),
+              _gap(settings, 8),
             ],
           ),
           build: (context) => [
             buildTable(),
-            pw.SizedBox(height: 12),
+            _gap(settings, 12),
             if (summary != null) summary,
           ],
         ),

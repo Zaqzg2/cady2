@@ -104,8 +104,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     final ok = await PrintService.instance
         .printPdfBytes(bytes, printerMac: app.settings.printerAddress);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة — تحقق من الإعدادات')));
+    showPrintResultSnack(context, ok);
   }
 
   Future<void> _shareStatement() async {
@@ -286,7 +285,7 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     final mac = context.read<AppProvider>().settings.printerAddress;
     final ok = await PrintService.instance.printPdfBytes(bytes, printerMac: mac);
     if (!mounted) return;
-    _snack(ok ? 'تمت الطباعة' : 'تعذّر الاتصال بالطابعة');
+    showPrintResultSnack(context, ok);
   }
 
   Future<void> _shareEntry(LedgerEntry e) async {

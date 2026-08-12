@@ -74,7 +74,10 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Future<void> _connectPrinter(PrinterDevice device) async {
-    final ok = await PrintService.instance.connect(device.macAddress);
+    // نستخدم verifyConnection (اتصال + كتابة تحقّق فعلية) بدل connect()
+    // المجرّدة، حتى نعرف من أول لحظة أن الطباعة الفعلية ستنجح، لا أن
+    // المصافحة الأولية فقط نجحت — ويمنحنا سجل تشخيص جاهز عند الفشل.
+    final ok = await PrintService.instance.verifyConnection(device.macAddress);
     if (!mounted) return;
     if (ok) {
       final app = context.read<AppProvider>();
@@ -89,7 +92,12 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       });
       _snack('تم الاتصال بالطابعة ${device.name}');
     } else {
-      _snack('تعذّر الاتصال بالطابعة');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('تعذّر الاتصال بالطابعة'),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+            label: 'التفاصيل', onPressed: () => showPrintDiagnosticsDialog(context)),
+      ));
     }
   }
 
