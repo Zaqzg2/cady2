@@ -209,28 +209,29 @@ class PrintService {
   static final Uint8List _pingBytes = Uint8List.fromList(const [0x1B, 0x40]);
 
   /// يحوّل صورة [image] (حزمة image v4.x، RGBA) إلى بيانات أمر ESC/POS
-  /// GS v 0 (طباعة نقطية خام) كاملة — بتنقيط Floyd–Steinberg مكتوب هنا
-  /// يدويًا، بدل استخدام Generator.imageRaster من حزمة esc_pos_utils_plus.
+  /// GS v 0 (طباعة نقطية خام) كاملة، بعتبة تحويل رمادي←أسود ثابتة (بلا
+  /// تنقيط/dithering) — بدل استخدام Generator.imageRaster من حزمة
+  /// esc_pos_utils_plus (راجع الشرح أعلى الملف لسبب استبدالها أصلاً).
   ///
-  /// سبب هذا الاستبدال: الطباعة الفعلية على الجهاز أنتجت تشويشًا كثيفًا
-  /// أشبه بخطوط عمودية كثّة في كل منطقة نصية بالفاتورة، بينما صورة التوقيع
-  /// (ثنائية اللون أصلاً، أبيض/أسود صرف بلا تدرّج) خرجت سليمة تمامًا. هذا
-  /// النمط بالضبط (تلف فقط في المناطق ذات تدرّج رمادي، لا في الصور الثنائية
-  /// الجاهزة) يتوافق مع خلل في خطوة تحويل التدرّج الرمادي/التنقيط، على
-  /// الأغلب توافق إصدار بين esc_pos_utils_plus (لم يُحدَّث منذ فترة) وحزمة
-  /// image ^4.x الحالية التي غيّرت شكل واجهة قراءة البكسل جذريًا (يُرجع
-  /// getPixel كائن Pixel لا عددًا صحيحًا كما بإصدارات أقدم). بكتابة هذه
-  /// الخطوة يدويًا هنا، نتحقق ونتحكم بكل بايت بأنفسنا بدل الاعتماد على
-  /// مكتبة قد لا تتوافق فعليًا مع نسخة image المُثبَّتة.
-  Uint8List _buildRasterCommand(img.Image image) {
+  /// لماذا عتبة بسيطة لا تنقيط Floyd–Steinberg (كما كان بإصدار سابق من هذا
+  /// الملف): التنقيط ممتاز لصور فوتوغرافية بتدرّجات لونية، لكنه يجعل النص
+  /// يبدو باهتًا على طابعة حرارية منخفضة الدقة نسبيًا (203dpi) — لأن حواف
+  /// الحروف المُنعَّمة (anti-aliasing) تحتوي بكسلات رمادية كثيرة، والتنقيط
+  /// يحوّل نصفها تقريبًا لأبيض بدل أسود لمحاكاة اللون الرمادي "بصريًا"، وهذا
+  /// بالضبط ما لاحظه المستخدم: نص باهت مقابل توقيع (صورة ثنائية أصلاً بلا
+  /// رمادي يُذكر) طبع بلون قوي واضح. عتبة ثابتة تُلزم كل بكسل غامق نسبيًا
+  /// بالأسود الصرف فتخرج الحروف أعرض وأغمق وأوضح — وهذا هو المطلوب فعليًا
+  /// لمستند نصي/جدولي كالفاتورة، لا لصورة.
+  ///
+  /// [threshold] بين 0-255: كل بكسل إضاءته (luminance) أقل من أو تساوي هذه
+  /// القيمة يُطبع أسود، وإلا أبيض. أعلى من المنتصف الرياضي 127 عمدًا (القيمة
+  /// الافتراضية بالإعدادات 175) لتعويض بكسلات تنعيم الحواف الرمادية الفاتحة
+  /// نسبيًا التي يجب أن تُطبع أسود حتى يبدو النص كثيفًا لا باهتًا. قابل
+  /// للتعديل من شاشة إعدادات الطباعة (company_settings.dart: printBlackThreshold).
+  Uint8List _buildRasterCommand(img.Image image, {required int threshold}) {
     final width = image.width;
     final height = image.height;
     final rowBytes = (width + 7) >> 3;
-
-    // خطأ التنقيط التراكمي (Floyd–Steinberg): يكفي الاحتفاظ بصف الأخطاء
-    // الحالي والتالي فقط، لأن نمط التوزيع لا يمتد لأبعد من سطر واحد للأسفل
-    var errCurr = List<double>.filled(width, 0);
-    var errNext = List<double>.filled(width, 0);
     final packed = Uint8List(rowBytes * height);
 
     for (var y = 0; y < height; y++) {
@@ -238,19 +239,10 @@ class PrintService {
         final px = image.getPixel(x, y);
         // إضاءة قياسية (luminance) — نفس المعامل العالمي لتحويل RGB لرمادي
         final gray = 0.299 * px.r + 0.587 * px.g + 0.114 * px.b;
-        final old = gray + errCurr[x];
-        final isBlack = old <= 127.5;
-        if (isBlack) {
+        if (gray <= threshold) {
           packed[y * rowBytes + (x >> 3)] |= (0x80 >> (x & 7));
         }
-        final err = old - (isBlack ? 0 : 255);
-        if (x + 1 < width) errCurr[x + 1] += err * 7 / 16;
-        if (x - 1 >= 0) errNext[x - 1] += err * 3 / 16;
-        errNext[x] += err * 5 / 16;
-        if (x + 1 < width) errNext[x + 1] += err * 1 / 16;
       }
-      errCurr = errNext;
-      errNext = List<double>.filled(width, 0);
     }
 
     // رأس أمر GS v 0: 1D 76 30 m xL xH yL yH ثم بيانات الصورة (m=0 عادي،
@@ -276,7 +268,8 @@ class PrintService {
   /// يحوّل أول صفحة من ملف PDF (المُصمَّم أصلاً بعرض 80مم) إلى صورة، ثم
   /// يطبعها عبر البلوتوث على طابعة 80مم حرارية متصلة مسبقًا، مع كل طبقات
   /// الحماية الثلاث الموثّقة أعلى الملف.
-  Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
+  Future<bool> printPdfBytes(Uint8List pdfBytes,
+      {String? printerMac, int blackThreshold = 175}) async {
     _resetLog();
     _log('— بدء طباعة (PDF: ${pdfBytes.length} بايت) —');
 
@@ -324,7 +317,7 @@ class PrintService {
 
     late final Uint8List payload;
     try {
-      final raster = _buildRasterCommand(finalImage);
+      final raster = _buildRasterCommand(finalImage, threshold: blackThreshold);
       payload = Uint8List.fromList([
         0x1B, 0x40, // ESC @  — تهيئة
         ...raster, // GS v 0 — بيانات الصورة النقطية

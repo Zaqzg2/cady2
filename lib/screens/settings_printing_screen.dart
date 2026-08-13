@@ -21,6 +21,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
   double _rowSpacing = 4;
   double _bodyFontSize = 9;
   double _lineSpacing = 1.2;
+  double _blackThreshold = 175;
   StatementFormat _statementFormat = StatementFormat.thermal80;
   List<PrinterDevice> _pairedDevices = [];
   String? _selectedPrinterMac;
@@ -35,6 +36,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
     _rowSpacing = s.rowSpacing;
     _bodyFontSize = s.invoiceBodyFontSize;
     _lineSpacing = s.invoiceLineSpacing;
+    _blackThreshold = s.printBlackThreshold.toDouble();
     _statementFormat = s.defaultStatementFormat;
     _selectedPrinterMac = s.printerAddress;
     _loadPairedDevices();
@@ -139,6 +141,7 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
     s.rowSpacing = _rowSpacing;
     s.invoiceBodyFontSize = _bodyFontSize;
     s.invoiceLineSpacing = _lineSpacing;
+    s.printBlackThreshold = _blackThreshold.round();
     s.defaultStatementFormat = _statementFormat;
     await app.saveSettings(s);
     if (mounted) _snack('تم حفظ إعدادات الطباعة');
@@ -325,6 +328,20 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
             label: '${_lineSpacing.toStringAsFixed(1)}x',
             onChanged: (v) => setState(() => _lineSpacing = v),
           ),
+          Text('كثافة/غمقان النص المطبوع: ${_blackThreshold.toStringAsFixed(0)}'
+              '${_blackThreshold >= 200 ? '  (غامق جدًا)' : _blackThreshold <= 140 ? '  (فاتح)' : ''}'),
+          Slider(
+            value: _blackThreshold,
+            min: 120,
+            max: 210,
+            divisions: 18,
+            label: _blackThreshold.toStringAsFixed(0),
+            onChanged: (v) => setState(() => _blackThreshold = v),
+          ),
+          const Text(
+              'ارفعها إن كان النص يطبع باهتًا/رماديًا، خفّضها إن كان غامقًا جدًا '
+              'أو خطوط الجدول أصبحت سميكة أكثر من اللازم.',
+              style: TextStyle(fontSize: 12, color: Colors.grey)),
           const Divider(height: 32),
 
           const Text('صيغة طباعة كشف الحساب الافتراضية',

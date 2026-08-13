@@ -185,7 +185,8 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     if (!mounted) return;
     await printDocument(context, bytes,
         printerMac: app.settings.printerAddress,
-        preferSystem: app.settings.preferSystemPrintDialog);
+        preferSystem: app.settings.preferSystemPrintDialog,
+        blackThreshold: app.settings.printBlackThreshold);
   }
 
   Future<void> _downloadPdf() async {

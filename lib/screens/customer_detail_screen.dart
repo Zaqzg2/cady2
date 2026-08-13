@@ -104,7 +104,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     if (!mounted) return;
     await printDocument(context, bytes,
         printerMac: app.settings.printerAddress,
-        preferSystem: app.settings.preferSystemPrintDialog);
+        preferSystem: app.settings.preferSystemPrintDialog,
+        blackThreshold: app.settings.printBlackThreshold);
   }
 
   Future<void> _shareStatement() async {
@@ -286,7 +287,8 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
     final app = context.read<AppProvider>();
     await printDocument(context, bytes,
         printerMac: app.settings.printerAddress,
-        preferSystem: app.settings.preferSystemPrintDialog);
+        preferSystem: app.settings.preferSystemPrintDialog,
+        blackThreshold: app.settings.printBlackThreshold);
   }
 
   Future<void> _shareEntry(LedgerEntry e) async {

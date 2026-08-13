@@ -44,6 +44,7 @@ Future<void> printDocument(
   Uint8List pdfBytes, {
   String? printerMac,
   bool preferSystem = false,
+  int blackThreshold = 175,
   VoidCallback? onPrinted,
 }) async {
   final messenger = ScaffoldMessenger.of(context);
@@ -58,7 +59,8 @@ Future<void> printDocument(
     return;
   }
 
-  final ok = await PrintService.instance.printPdfBytes(pdfBytes, printerMac: printerMac);
+  final ok = await PrintService.instance
+      .printPdfBytes(pdfBytes, printerMac: printerMac, blackThreshold: blackThreshold);
   if (!context.mounted) return;
   if (ok) {
     messenger.showSnackBar(const SnackBar(content: Text('تمت الطباعة')));

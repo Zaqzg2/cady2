@@ -83,6 +83,7 @@ class DocumentCard extends StatelessWidget {
       bytes,
       printerMac: app.settings.printerAddress,
       preferSystem: app.settings.preferSystemPrintDialog,
+      blackThreshold: app.settings.printBlackThreshold,
       onPrinted: () async {
         if (row.invoice != null) {
           await app.markInvoicePrinted(row.id);

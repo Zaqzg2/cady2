@@ -224,7 +224,8 @@ class _InvoiceScreenState extends State<InvoiceScreen> {
     if (!mounted) return;
     await printDocument(context, bytes,
         printerMac: app.settings.printerAddress,
-        preferSystem: app.settings.preferSystemPrintDialog);
+        preferSystem: app.settings.preferSystemPrintDialog,
+        blackThreshold: app.settings.printBlackThreshold);
   }
 
   Future<void> _downloadPdf() async {

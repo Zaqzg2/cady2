@@ -80,6 +80,12 @@ class CompanySettings {
   // print_service.dart لتفاصيل السبب). افتراضيًا false للحفاظ على السرعة
   // الحالية على الأجهزة التي تعمل فيها الطباعة المباشرة بلا مشاكل.
   bool preferSystemPrintDialog;
+  // درجة تحويل الرمادي إلى أسود عند طباعة الصور النقطية (0-255): كل بكسل
+  // درجته أغمق من هذه القيمة يُطبع أسود صرفًا، وإلا فأبيض — بلا تدرّج
+  // رمادي بينهما. القيمة الافتراضية أعلى من المنتصف الرياضي (128) عمدًا:
+  // نصوص الفاتورة تمر بتنعيم حواف (anti-aliasing) يجعل كثيرًا من بكسلاتها
+  // رماديًا فاتحًا لا أسود صرفًا، فعتبة أعلى تجعل الحروف تطبع أغمق وأوضح.
+  int printBlackThreshold;
 
   // المظهر
   AppThemeMode themeMode;
@@ -115,6 +121,7 @@ class CompanySettings {
     this.printerName,
     this.defaultStatementFormat = StatementFormat.thermal80,
     this.preferSystemPrintDialog = false,
+    this.printBlackThreshold = 175,
     this.themeMode = AppThemeMode.system,
     this.appFontScale = 1.0,
     this.hapticOnSave = true,
@@ -154,6 +161,7 @@ class CompanySettings {
         'printerName': printerName,
         'defaultStatementFormat': defaultStatementFormat.name,
         'preferSystemPrintDialog': preferSystemPrintDialog,
+        'printBlackThreshold': printBlackThreshold,
         'themeMode': themeMode.name,
         'appFontScale': appFontScale,
         'hapticOnSave': hapticOnSave,
@@ -189,6 +197,7 @@ class CompanySettings {
             (v) => v.name == m['defaultStatementFormat'],
             orElse: () => StatementFormat.thermal80),
         preferSystemPrintDialog: (m['preferSystemPrintDialog'] as bool?) ?? false,
+        printBlackThreshold: (m['printBlackThreshold'] as num?)?.toInt() ?? 175,
         // توافق مع النسخ القديمة التي كانت تخزّن darkMode كـ bool فقط
         themeMode: m['themeMode'] != null
             ? AppThemeMode.values.firstWhere((v) => v.name == m['themeMode'],

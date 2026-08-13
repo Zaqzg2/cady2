@@ -27,7 +27,8 @@ class PrintService {
 
   Future<bool> verifyConnection(String? printerMac) async => false;
 
-  Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
+  Future<bool> printPdfBytes(Uint8List pdfBytes,
+      {String? printerMac, int blackThreshold = 175}) async {
     return Printing.layoutPdf(onLayout: (format) async => pdfBytes);
   }
 
