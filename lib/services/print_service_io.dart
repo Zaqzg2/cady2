@@ -1,5 +1,4 @@
 import 'dart:typed_data';
-import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:printing/printing.dart';
@@ -209,6 +208,61 @@ class PrintService {
   /// يُستخدم فقط للتحقق أن الكتابة الفعلية على المقبس تنجح.
   static final Uint8List _pingBytes = Uint8List.fromList(const [0x1B, 0x40]);
 
+  /// يحوّل صورة [image] (حزمة image v4.x، RGBA) إلى بيانات أمر ESC/POS
+  /// GS v 0 (طباعة نقطية خام) كاملة — بتنقيط Floyd–Steinberg مكتوب هنا
+  /// يدويًا، بدل استخدام Generator.imageRaster من حزمة esc_pos_utils_plus.
+  ///
+  /// سبب هذا الاستبدال: الطباعة الفعلية على الجهاز أنتجت تشويشًا كثيفًا
+  /// أشبه بخطوط عمودية كثّة في كل منطقة نصية بالفاتورة، بينما صورة التوقيع
+  /// (ثنائية اللون أصلاً، أبيض/أسود صرف بلا تدرّج) خرجت سليمة تمامًا. هذا
+  /// النمط بالضبط (تلف فقط في المناطق ذات تدرّج رمادي، لا في الصور الثنائية
+  /// الجاهزة) يتوافق مع خلل في خطوة تحويل التدرّج الرمادي/التنقيط، على
+  /// الأغلب توافق إصدار بين esc_pos_utils_plus (لم يُحدَّث منذ فترة) وحزمة
+  /// image ^4.x الحالية التي غيّرت شكل واجهة قراءة البكسل جذريًا (يُرجع
+  /// getPixel كائن Pixel لا عددًا صحيحًا كما بإصدارات أقدم). بكتابة هذه
+  /// الخطوة يدويًا هنا، نتحقق ونتحكم بكل بايت بأنفسنا بدل الاعتماد على
+  /// مكتبة قد لا تتوافق فعليًا مع نسخة image المُثبَّتة.
+  Uint8List _buildRasterCommand(img.Image image) {
+    final width = image.width;
+    final height = image.height;
+    final rowBytes = (width + 7) >> 3;
+
+    // خطأ التنقيط التراكمي (Floyd–Steinberg): يكفي الاحتفاظ بصف الأخطاء
+    // الحالي والتالي فقط، لأن نمط التوزيع لا يمتد لأبعد من سطر واحد للأسفل
+    var errCurr = List<double>.filled(width, 0);
+    var errNext = List<double>.filled(width, 0);
+    final packed = Uint8List(rowBytes * height);
+
+    for (var y = 0; y < height; y++) {
+      for (var x = 0; x < width; x++) {
+        final px = image.getPixel(x, y);
+        // إضاءة قياسية (luminance) — نفس المعامل العالمي لتحويل RGB لرمادي
+        final gray = 0.299 * px.r + 0.587 * px.g + 0.114 * px.b;
+        final old = gray + errCurr[x];
+        final isBlack = old <= 127.5;
+        if (isBlack) {
+          packed[y * rowBytes + (x >> 3)] |= (0x80 >> (x & 7));
+        }
+        final err = old - (isBlack ? 0 : 255);
+        if (x + 1 < width) errCurr[x + 1] += err * 7 / 16;
+        if (x - 1 >= 0) errNext[x - 1] += err * 3 / 16;
+        errNext[x] += err * 5 / 16;
+        if (x + 1 < width) errNext[x + 1] += err * 1 / 16;
+      }
+      errCurr = errNext;
+      errNext = List<double>.filled(width, 0);
+    }
+
+    // رأس أمر GS v 0: 1D 76 30 m xL xH yL yH ثم بيانات الصورة (m=0 عادي،
+    // xL/xH عرض السطر بالبايت، yL/yH الارتفاع بالبكسل، كلاهما little-endian)
+    final header = <int>[
+      0x1D, 0x76, 0x30, 0x00,
+      rowBytes & 0xFF, (rowBytes >> 8) & 0xFF,
+      height & 0xFF, (height >> 8) & 0xFF,
+    ];
+    return Uint8List.fromList([...header, ...packed]);
+  }
+
   /// تحقّق حقيقي من الاتصال بالطابعة عبر كتابة فعلية صغيرة، وليس
   /// connectionStatus وحدها. تستخدمها شاشة الإعدادات لعرض حالة "متصلة"
   /// تعكس فعلًا ما سيحدث عند الطباعة الحقيقية، بدل شارة متفائلة قد تكون
@@ -236,7 +290,23 @@ class PrintService {
         final pngBytes = await page.toPng();
         final decoded = img.decodePng(pngBytes);
         if (decoded == null) continue;
-        finalImage = img.copyResize(decoded, width: targetWidthPx);
+        // نُسطّح الصورة على خلفية بيضاء صريحة قبل أي تصغير أو تنقيط — دفاعًا
+        // عن أي احتمال أن مساحات الصفحة "الفارغة" تخرج من محوّل PDF←→صورة
+        // بقناة شفافية (alpha=0) بدل أبيض صريح. صورة شفافة تُقرأ لاحقًا فقط
+        // عبر قنوات r/g/b (بدون a) قد تُفسَّر خطأً كسواد، فتسطيحها هنا يمنع
+        // هذا الاحتمال نهائيًا بغض النظر عمّا يفعله المحوّل فعليًا.
+        final flattened = img.Image(
+          width: decoded.width,
+          height: decoded.height,
+          numChannels: 4,
+        );
+        img.fill(flattened, color: img.ColorRgba8(255, 255, 255, 255));
+        img.compositeImage(flattened, decoded, blend: img.BlendMode.alpha);
+        finalImage = img.copyResize(
+          flattened,
+          width: targetWidthPx,
+          interpolation: img.Interpolation.average,
+        );
         break; // فاتورة/سند عادة صفحة واحدة (roll80)
       }
     } catch (e) {
@@ -252,15 +322,21 @@ class PrintService {
     }
     _log('تم تحويل PDF إلى صورة ${finalImage.width}×${finalImage.height}');
 
-    final profile = await CapabilityProfile.load();
-    final generator = Generator(PaperSize.mm80, profile);
-    List<int> bytes = [];
-    bytes += generator.reset();
-    bytes += generator.imageRaster(finalImage, align: PosAlign.center);
-    bytes += generator.feed(2);
-    bytes += generator.cut();
-    final payload = Uint8List.fromList(bytes);
-    _log('حجم أوامر ESC/POS النهائية: ${payload.length} بايت');
+    late final Uint8List payload;
+    try {
+      final raster = _buildRasterCommand(finalImage);
+      payload = Uint8List.fromList([
+        0x1B, 0x40, // ESC @  — تهيئة
+        ...raster, // GS v 0 — بيانات الصورة النقطية
+        0x1B, 0x64, 0x02, // ESC d 2 — تغذية سطرين
+        0x1D, 0x56, 0x01, // GS V 1  — قص جزئي (يُتجاهل بأمان إن لم تدعمه الطابعة)
+      ]);
+      _log('حجم أوامر ESC/POS النهائية: ${payload.length} بايت');
+    } catch (e) {
+      _log('❌ فشل بناء أوامر ESC/POS: $e');
+      lastError = 'فشل تجهيز بيانات الطباعة';
+      return false;
+    }
 
     return _writeVerified(payload, printerMac);
   }

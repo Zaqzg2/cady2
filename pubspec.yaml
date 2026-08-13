@@ -44,7 +44,6 @@ dependencies:
   share_plus: ^12.0.2
 
   # طباعة حرارية 80مم عبر بلوتوث (ESC/POS)
-  esc_pos_utils_plus: ^2.0.4
   permission_handler: ^11.3.1
   image: ^4.2.0
 
