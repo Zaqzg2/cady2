@@ -2,14 +2,23 @@ import 'dart:typed_data';
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:image/image.dart' as img;
 import 'package:permission_handler/permission_handler.dart';
-import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import 'package:printing/printing.dart';
 
+import 'native_bt_bridge.dart';
 import 'printer_device.dart';
 
 /// خدمة الطباعة الحرارية 80مم عبر البلوتوث مباشرة (بدون تطبيقات وسيطة) —
 /// النسخة الحقيقية لأندرويد/iOS/سطح المكتب. لا تُستخدم هذه النسخة إطلاقًا
 /// على الويب (راجع print_service_web.dart وprint_service.dart).
+///
+/// طبقة الاتصال الفعلية الآن NativeBtBridge (Kotlin أصلي، راجع
+/// android/app/src/main/kotlin/.../BluetoothPrinterBridge.kt) بدل مكتبة
+/// print_bluetooth_thermal الخارجية — تبيّن أن تلك المكتبة تفشل بالكتابة
+/// على أجهزة معيّنة رغم نجاح الاتصال الظاهري في كل مرة (سجلات lastAttemptLog
+/// أثبتت هذا بشكل قاطع: connect() ينجح دائمًا، writeBytes() يفشل فورًا)،
+/// بينما نفس الجهاز ونفس الطابعة يعملان بلا مشاكل عبر تطبيقات أخرى. الطبقة
+/// الأصلية الجديدة تستخدم فقط android.bluetooth القياسية، مع مقبس احتياطي
+/// على القناة الخام (راجع تعليق BluetoothPrinterBridge.kt للتفاصيل).
 ///
 /// السبب في طباعة "صورة" بدل نص ESC/POS مباشر: الطابعات الحرارية
 /// تعتمد على صفحات ترميز (codepages) لا تدعم تشكيل الحروف العربية بشكل
@@ -17,25 +26,20 @@ import 'printer_device.dart';
 /// نقطية (raster) ثم نرسلها بأوامر ESC/POS كصورة — فتخرج مطابقة تمامًا
 /// لما يظهر في PDF، بما في ذلك النصوص العربية والشعار والتوقيع.
 ///
-/// ثلاث طبقات حماية ضد فشل الاتصال/الطباعة "الصامت" (راجع lastAttemptLog
+/// طبقات حماية ضد فشل الاتصال/الطباعة "الصامت" (راجع lastAttemptLog
 /// لتشخيص أي حالة فعلية على أي جهاز):
-/// 1) صلاحيات بلوتوث أندرويد 12+ تُطلَب صراحة قبل أي عملية (_ensurePermissions)
-///    — كانت حزمة permission_handler مضافة بـ pubspec.yaml لكن غير
-///    مُستخدَمة إطلاقًا في الكود، فإن رفض النظام الصلاحية بصمت (شائع بعد
-///    إعادة تثبيت التطبيق أو تحديث أندرويد) كان كل شيء آخر سيفشل بلا تفسير.
+/// 1) صلاحيات بلوتوث أندرويد 12+ تُطلَب صراحة قبل أي عملية (_ensurePermissions).
 /// 2) الكتابة الفعلية مجزّأة على دفعات صغيرة (_writeChunked) بدل دفعة واحدة
 ///    ضخمة، لأن صورة فاتورة كاملة قد تتجاوز عشرات الكيلوبايتات، وإرسالها
 ///    دفعة واحدة عبر Bluetooth Classic SPP يُفيض مخزن الطابعة المؤقت
 ///    المحدود على كثير من الطابعات الرخيصة فتفشل الكتابة أو تتوقف منتصف
-///    الإرسال — مشكلة موثّقة شائعة تحديدًا مع طباعة الصور الكبيرة.
-/// 3) تحقّق حقيقي من الاتصال (_writeVerified) بدل الاكتفاء بـ
-///    connectionStatus وحدها: مقبس بلوتوث أندرويد/iOS لا يوفر طريقة تسأل
-///    بها "هل ما زلت حيًا الآن فعلًا؟" — connectionStatus يعكس فقط "هل نجح
-///    connect() سابقًا ولم يُستدعَ disconnect() بعده"، حتى لو انقطع الاتصال
-///    فعليًا بصمت (قفل الشاشة، خمول لبضع دقائق، تذبذب الراديو...). لذلك لا
-///    نثق بها وحدها؛ نكتب فعليًا، وإن فشلت الكتابة رغم "الاتصال"، نفرض
-///    إعادة اتصال كاملة (فصل ثم اتصال) بنفس العنوان المحفوظ ونعيد الكتابة
-///    مرة أخيرة قبل اعتبارها فشلت فعلًا.
+///    الإرسال.
+/// 3) تحقّق حقيقي من الاتصال (_writeVerified) بدل الاكتفاء بحالة الاتصال
+///    وحدها: نكتب فعليًا، وإن فشلت الكتابة رغم "الاتصال"، نفرض إعادة اتصال
+///    كاملة (فصل ثم اتصال) ونعيد الكتابة مرة أخيرة قبل اعتبارها فشلت فعلًا.
+/// 4) عند فشل كل ما سبق: printViaSystemDialog يفوّض الطباعة الفعلية لأي
+///    خدمة طباعة مُثبَّتة بالنظام (مثل RawBT)، مسار مستقل تمامًا عن كل ما
+///    سبق ومُثبَت أنه يعمل على هذا الجهاز.
 class PrintService {
   PrintService._();
   static final PrintService instance = PrintService._();
@@ -78,8 +82,8 @@ class PrintService {
   ///       android:maxSdkVersion="30" />
   Future<void> _ensurePermissions() async {
     try {
-      final granted = await PrintBluetoothThermal.isPermissionBluetoothGranted;
-      if (granted) {
+      final already = await Permission.bluetoothConnect.status;
+      if (already.isGranted) {
         _log('صلاحية البلوتوث: ممنوحة ✓');
         return;
       }
@@ -100,19 +104,16 @@ class PrintService {
 
   Future<List<PrinterDevice>> getPairedDevices() async {
     await _ensurePermissions();
-    final list = await PrintBluetoothThermal.pairedBluetooths;
-    return list
-        .map((d) => PrinterDevice(name: d.name, macAddress: d.macAdress))
-        .toList();
+    return NativeBtBridge.instance.pairedDevices();
   }
 
   Future<bool> connect(String macAddress) async {
-    return PrintBluetoothThermal.connect(macPrinterAddress: macAddress);
+    return NativeBtBridge.instance.connect(macAddress);
   }
 
-  Future<bool> get isConnected => PrintBluetoothThermal.connectionStatus;
+  Future<bool> get isConnected => NativeBtBridge.instance.isConnected();
 
-  Future<void> disconnect() => PrintBluetoothThermal.disconnect;
+  Future<void> disconnect() => NativeBtBridge.instance.disconnect();
 
   /// يكتب [bytes] على دفعات صغيرة بدل دفعة واحدة ضخمة (راجع الشرح أعلى
   /// الملف، البند 2). مهلة قصيرة بين كل دفعة والتالية تعطي الطابعة وقتًا
@@ -120,7 +121,7 @@ class PrintService {
   Future<bool> _writeChunked(Uint8List bytes) async {
     const chunkSize = 1024;
     if (bytes.length <= chunkSize) {
-      final ok = await PrintBluetoothThermal.writeBytes(bytes);
+      final ok = await NativeBtBridge.instance.writeBytes(bytes);
       _log('كتابة ${bytes.length} بايت (دفعة واحدة): ${ok ? "نجحت" : "فشلت"}');
       return ok;
     }
@@ -134,7 +135,7 @@ class PrintService {
       chunkIndex++;
       bool ok;
       try {
-        ok = await PrintBluetoothThermal.writeBytes(chunk);
+        ok = await NativeBtBridge.instance.writeBytes(chunk);
       } catch (e) {
         _log('❌ استثناء أثناء كتابة الدفعة $chunkIndex/$totalChunks: $e');
         return false;
@@ -164,6 +165,13 @@ class PrintService {
         _log('محاولة اتصال بـ $printerMac...');
         connected = await connect(printerMac);
         _log('نتيجة connect(): $connected');
+        if (connected) {
+          // مهلة استقرار قصيرة بعد اتصال جديد مباشرة — بعض الطابعات
+          // الرخيصة تحتاج جزءًا من الثانية قبل أن تصبح جاهزة فعليًا لاستقبال
+          // بيانات رغم أن المصافحة الأولية اكتملت. إضافتها لا تضر شيئًا في
+          // أسوأ الأحوال.
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
       }
       if (!connected) {
         _log('❌ فشل نهائي: لا يوجد اتصال حي، ولا عنوان طابعة محفوظ لإعادة المحاولة');
@@ -176,13 +184,14 @@ class PrintService {
         _log('الكتابة فشلت رغم أن الحالة كانت "متصلة" — هذا يعني أن المقبس '
             'كان ميتًا بصمت. إعادة اتصال كاملة كمحاولة أخيرة...');
         try {
-          await PrintBluetoothThermal.disconnect;
+          await NativeBtBridge.instance.disconnect();
         } catch (e) {
           _log('⚠️ استثناء أثناء disconnect(): $e');
         }
         final reconnected = await connect(printerMac);
         _log('نتيجة إعادة الاتصال: $reconnected');
         if (reconnected) {
+          await Future.delayed(const Duration(milliseconds: 300));
           ok = await _writeChunked(bytes);
         }
       }
@@ -254,5 +263,30 @@ class PrintService {
     _log('حجم أوامر ESC/POS النهائية: ${payload.length} بايت');
 
     return _writeVerified(payload, printerMac);
+  }
+
+  /// يطبع عبر مربع حوار نظام التشغيل القياسي (Android/iOS) بدل الاتصال
+  /// المباشر بمكتبة print_bluetooth_thermal. يظهر فيه أي خدمة طباعة
+  /// مُثبَّتة ومُفعَّلة على الجهاز (مثل RawBT) كخيار "طابعة" — النظام نفسه
+  /// يتولى الاتصال بالطابعة عندها، لا كود التطبيق ولا هذه المكتبة إطلاقًا.
+  ///
+  /// هذا مسار بديل مُثبَت عمليًا: عند فشل الاتصال المباشر رغم كل محاولات
+  /// الإصلاح (صلاحيات، تجزئة الكتابة، إعادة اتصال، مهلة استقرار)، تبيّن أن
+  /// نفس الهاتف ونفس الطابعة يطبعان بلا أي مشكلة عبر تطبيق RawBT — أي أن
+  /// العطل داخل مكتبة print_bluetooth_thermal نفسها وليس بجهاز المستخدم أو
+  /// بمنطق التطبيق. تفويض الاتصال الفعلي لتطبيق مُثبَت يعمل فعلاً هو الحل
+  /// العملي الأضمن بدل الاستمرار بمحاولة إصلاح مكتبة لا نملك مصدرها.
+  Future<bool> printViaSystemDialog(Uint8List pdfBytes) async {
+    _resetLog();
+    _log('— طباعة عبر مربع حوار نظام التشغيل —');
+    try {
+      final ok = await Printing.layoutPdf(onLayout: (format) async => pdfBytes);
+      _log(ok ? '✅ تم تسليم المستند لخدمة الطباعة' : '❌ ألغى المستخدم الحوار أو فشلت الخدمة');
+      return ok;
+    } catch (e) {
+      _log('❌ استثناء أثناء فتح حوار الطباعة: $e');
+      lastError = e.toString();
+      return false;
+    }
   }
 }

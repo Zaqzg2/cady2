@@ -74,26 +74,43 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
 
   Future<void> _connectPrinter(PrinterDevice device) async {
-    // نستخدم verifyConnection (اتصال + كتابة تحقّق فعلية) بدل connect()
-    // المجرّدة، حتى نعرف من أول لحظة أن الطباعة الفعلية ستنجح، لا أن
-    // المصافحة الأولية فقط نجحت — ويمنحنا سجل تشخيص جاهز عند الفشل.
-    final ok = await PrintService.instance.verifyConnection(device.macAddress);
+    // نحفظ عنوان الطابعة إن نجحت المصافحة الأساسية connect() فقط — لا نشترط
+    // نجاح verifyConnection (اختبار كتابة فعلي) للحفظ، لأن كل منطق إعادة
+    // المحاولة بباقي التطبيق (printPdfBytes) يعتمد على وجود printerAddress
+    // محفوظ ليستخدمه عند إعادة الاتصال. لو اشترطنا نجاح الكتابة قبل الحفظ،
+    // وفشلت الكتابة دائمًا لأي سبب (كما حدث هنا)، لن يُحفَظ العنوان أبدًا —
+    // فتفقد كل شاشات الطباعة القدرة حتى على المحاولة، ويتفاقم العطل بدل أن
+    // يُشخَّص.
+    final connected = await PrintService.instance.connect(device.macAddress);
     if (!mounted) return;
-    if (ok) {
-      final app = context.read<AppProvider>();
-      final s = app.settings;
-      s.printerAddress = device.macAddress;
-      s.printerName = device.name;
-      await app.saveSettings(s);
-      if (!mounted) return;
-      setState(() {
-        _selectedPrinterMac = device.macAddress;
-        _liveConnected = true;
-      });
+    if (!connected) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('تعذّر الاتصال بالطابعة'),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+            label: 'التفاصيل', onPressed: () => showPrintDiagnosticsDialog(context)),
+      ));
+      return;
+    }
+
+    final app = context.read<AppProvider>();
+    final s = app.settings;
+    s.printerAddress = device.macAddress;
+    s.printerName = device.name;
+    await app.saveSettings(s);
+    if (!mounted) return;
+    setState(() => _selectedPrinterMac = device.macAddress);
+
+    // الآن —وبعد الحفظ— نتحقق فعليًا بكتابة حقيقية لعرض حالة دقيقة، دون أن
+    // يمنع فشلها حفظ العنوان الذي حصل للتو.
+    final verified = await PrintService.instance.verifyConnection(device.macAddress);
+    if (!mounted) return;
+    setState(() => _liveConnected = verified);
+    if (verified) {
       _snack('تم الاتصال بالطابعة ${device.name}');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('تعذّر الاتصال بالطابعة'),
+        content: const Text('اتصل الجهاز، لكن فشل اختبار كتابة فعلي — الطباعة الحقيقية ستفشل غالبًا'),
         duration: const Duration(seconds: 6),
         action: SnackBarAction(
             label: 'التفاصيل', onPressed: () => showPrintDiagnosticsDialog(context)),
@@ -242,6 +259,22 @@ class _SettingsPrintingScreenState extends State<SettingsPrintingScreen> {
                     groupValue: _selectedPrinterMac,
                     onChanged: (_) => _connectPrinter(d),
                   )),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('اطبع عبر تطبيق آخر بدل الاتصال المباشر'),
+              subtitle: const Text(
+                  'يتخطى الاتصال المباشر بالبلوتوث ويفتح حوار طباعة النظام مباشرة '
+                  '(اختر منه أي تطبيق مثبَّت مثل RawBT). فعّله إن كان جهازك لا '
+                  'يطبع مباشرة رغم ظهوره "متصلة".',
+                  style: TextStyle(fontSize: 12)),
+              value: app.settings.preferSystemPrintDialog,
+              onChanged: (v) async {
+                final s = app.settings;
+                s.preferSystemPrintDialog = v;
+                await app.saveSettings(s);
+              },
+            ),
           ],
           const Divider(height: 32),
 

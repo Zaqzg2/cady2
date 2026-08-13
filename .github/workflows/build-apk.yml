@@ -70,6 +70,15 @@ jobs:
       - name: ترقيع صلاحيات AndroidManifest (بلوتوث)
         run: python3 scripts/patch_manifest.py
 
+      # يربط طبقة البلوتوث الأصلية native/BluetoothPrinterBridge.kt (بديل
+      # print_bluetooth_thermal بعد إثبات فشلها بالكتابة على أجهزة معيّنة)
+      # داخل android/ المولَّد حديثًا هذه التشغيلة، وينشئ ربط MethodChannel
+      # في MainActivity.kt تلقائيًا. يجب أن يعمل بعد كل توليد لمجلد android
+      # (وليس مرة واحدة فقط) لأن المجلد غير متتبَّع بـ git ويُبنى من الصفر
+      # في كل مرة — راجع تعليق السكربت نفسه لمزيد من التفاصيل.
+      - name: ربط طبقة البلوتوث الأصلية (NativeBtBridge)
+        run: python3 scripts/patch_add_bluetooth_bridge.py
+
       - name: رفع compileSdk/targetSdk إلى 36 (مطلوب لبعض الحزم مثل file_picker)
         run: python3 scripts/patch_compile_sdk.py
 

@@ -101,10 +101,10 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       await Printing.layoutPdf(onLayout: (format) async => bytes);
       return;
     }
-    final ok = await PrintService.instance
-        .printPdfBytes(bytes, printerMac: app.settings.printerAddress);
     if (!mounted) return;
-    showPrintResultSnack(context, ok);
+    await printDocument(context, bytes,
+        printerMac: app.settings.printerAddress,
+        preferSystem: app.settings.preferSystemPrintDialog);
   }
 
   Future<void> _shareStatement() async {
@@ -282,10 +282,11 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   Future<void> _printEntry(LedgerEntry e) async {
     final bytes = await _entryPdfBytes(e);
     if (bytes == null) return;
-    final mac = context.read<AppProvider>().settings.printerAddress;
-    final ok = await PrintService.instance.printPdfBytes(bytes, printerMac: mac);
     if (!mounted) return;
-    showPrintResultSnack(context, ok);
+    final app = context.read<AppProvider>();
+    await printDocument(context, bytes,
+        printerMac: app.settings.printerAddress,
+        preferSystem: app.settings.preferSystemPrintDialog);
   }
 
   Future<void> _shareEntry(LedgerEntry e) async {

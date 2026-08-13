@@ -74,6 +74,12 @@ class CompanySettings {
   String? printerAddress; // عنوان MAC لطابعة البلوتوث المحفوظة
   String? printerName;
   StatementFormat defaultStatementFormat;
+  // اطبع عبر مربع حوار نظام التشغيل (يعرض أي خدمة طباعة مُثبَّتة كـ RawBT)
+  // بدل الاتصال المباشر بمكتبة البلوتوث. مفيد للأجهزة التي تفشل فيها
+  // المكتبة المباشرة رغم أن الطابعة تعمل فعليًا (راجع ملاحظة
+  // print_service.dart لتفاصيل السبب). افتراضيًا false للحفاظ على السرعة
+  // الحالية على الأجهزة التي تعمل فيها الطباعة المباشرة بلا مشاكل.
+  bool preferSystemPrintDialog;
 
   // المظهر
   AppThemeMode themeMode;
@@ -108,6 +114,7 @@ class CompanySettings {
     this.printerAddress,
     this.printerName,
     this.defaultStatementFormat = StatementFormat.thermal80,
+    this.preferSystemPrintDialog = false,
     this.themeMode = AppThemeMode.system,
     this.appFontScale = 1.0,
     this.hapticOnSave = true,
@@ -146,6 +153,7 @@ class CompanySettings {
         'printerAddress': printerAddress,
         'printerName': printerName,
         'defaultStatementFormat': defaultStatementFormat.name,
+        'preferSystemPrintDialog': preferSystemPrintDialog,
         'themeMode': themeMode.name,
         'appFontScale': appFontScale,
         'hapticOnSave': hapticOnSave,
@@ -180,6 +188,7 @@ class CompanySettings {
         defaultStatementFormat: StatementFormat.values.firstWhere(
             (v) => v.name == m['defaultStatementFormat'],
             orElse: () => StatementFormat.thermal80),
+        preferSystemPrintDialog: (m['preferSystemPrintDialog'] as bool?) ?? false,
         // توافق مع النسخ القديمة التي كانت تخزّن darkMode كـ bool فقط
         themeMode: m['themeMode'] != null
             ? AppThemeMode.values.firstWhere((v) => v.name == m['themeMode'],

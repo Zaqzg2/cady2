@@ -30,4 +30,8 @@ class PrintService {
   Future<bool> printPdfBytes(Uint8List pdfBytes, {String? printerMac}) async {
     return Printing.layoutPdf(onLayout: (format) async => pdfBytes);
   }
+
+  Future<bool> printViaSystemDialog(Uint8List pdfBytes) async {
+    return Printing.layoutPdf(onLayout: (format) async => pdfBytes);
+  }
 }
